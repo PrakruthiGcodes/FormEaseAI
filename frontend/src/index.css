@@ -1,0 +1,53 @@
+/* Global styles: light theme with blue and purple accents. */
+
+:root {
+  --blue: #2563eb;
+  --purple: #7c3aed;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --soft: #f8fafc;
+  --bg: #ffffff;
+  --user-bg: #eef2ff;
+  --error: #b91c1c;
+  --success: #15803d;
+
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Hidden from the screen but still read by screen readers. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

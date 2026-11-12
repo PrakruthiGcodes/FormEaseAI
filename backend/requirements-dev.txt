@@ -1,0 +1,4 @@
+# Test-only dependencies (not needed to run the server)
+pytest==9.2.0
+pypdf==6.21.4
+pypdfium2==5.14.0
