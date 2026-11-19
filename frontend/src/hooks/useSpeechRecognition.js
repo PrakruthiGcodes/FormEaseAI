@@ -55,7 +55,7 @@ export default function useSpeechRecognition({ languageCode, onFinish }) {
     try {
       const recognition = new RecognitionClass()
       recognition.lang = VOICE_LANGUAGES[languageCode].tag
-      recognition.continuous = true
+      recognition.continuous = false
       recognition.interimResults = true
       recognition.maxAlternatives = 1
 

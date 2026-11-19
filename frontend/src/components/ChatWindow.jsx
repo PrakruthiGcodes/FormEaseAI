@@ -12,7 +12,7 @@ export default function ChatWindow({ messages, isSending }) {
   if (messages.length === 0 && !isSending) {
     return (
       <div className="chat-window chat-empty">
-        <p>Type your answer below to get started. Voice input is coming in a later phase.</p>
+        <p>Type or speak your answer below to get started.</p>
       </div>
     )
   }
