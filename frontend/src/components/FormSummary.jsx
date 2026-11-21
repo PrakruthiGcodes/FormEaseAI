@@ -1,28 +1,23 @@
 import { useState } from 'react'
-import { FORM_FIELDS, FIELD_LABELS_BY_LANG, FIELD_EMPTY_PLACEHOLDERS, LANGUAGES } from '../utils/languages.js'
+import {
+  FORM_FIELDS,
+  FIELD_LABELS_BY_LANG,
+  FIELD_EMPTY_PLACEHOLDERS,
+  LANGUAGES,
+  DOMAIN_EXTRA_FIELDS,
+  SENSITIVE_FIELDS,
+  maskFieldValue,
+} from '../utils/languages.js'
 
-// Side panel: progress, extracted details (editable), missing fields, and actions.
-// Props:
-//   formData:             current values { full_name: 'Ananya', age: null, ... }
-//   englishFormData:      values translated/standardized into English for Admin/Collector
-//   language:             citizen's selected language code
-//   adminMode:            whether Admin / Form Collector English view is active
-//   onToggleAdminMode:    callback to switch between citizen view and admin view
-//   fieldErrors:          { field: message } for values that failed validation
-//   updatedFields:        fields changed by the latest reply (highlighted)
-//   nextQuestion:         the question the assistant is asking now
-//   conversationComplete: true when every field is filled
-//   saveLabel:            text describing the save state, e.g. "Saved"
-//   onEditField(field, value) -> Promise<string | null>  (error message or null)
-//   onReview(), onSavedForms(), onNewForm()
+// Side panel: progress, extracted details (editable), domain extra fields, PII masking, and actions.
 export default function FormSummary({
-  formData,
-  englishFormData,
+  formData = {},
+  englishFormData = {},
   language = 'en',
   adminMode = false,
   onToggleAdminMode,
-  fieldErrors,
-  updatedFields,
+  fieldErrors = {},
+  updatedFields = [],
   nextQuestion,
   conversationComplete,
   saveLabel,
@@ -30,36 +25,70 @@ export default function FormSummary({
   onReview,
   onSavedForms,
   onNewForm,
+  formType = 'general',
+  extraFields = {},
+  englishExtraFields = {},
+  onEditExtraField,
+  privacyMask = true,
+  onOpenSavePinModal,
 }) {
-  const [editing, setEditing] = useState(null) // field key being edited
+  const [editing, setEditing] = useState(null) // { isExtra: boolean, key: string } or null
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState('')
-  // On phones the panel starts collapsed so the conversation has room. Desktop always shows it.
   const [open, setOpen] = useState(false)
+  const [peekedFields, setPeekedFields] = useState({})
 
   const currentLangObj = LANGUAGES.find((l) => l.code === language) || { label: 'English' }
   const displayData = adminMode ? (englishFormData || formData) : formData
+  const displayExtra = adminMode ? (englishExtraFields || extraFields) : extraFields
+
+  const extraFieldDefs = DOMAIN_EXTRA_FIELDS[formType] || []
 
   function getFieldLabel(key, englishLabel) {
     if (adminMode) return englishLabel
     return FIELD_LABELS_BY_LANG[language]?.[key] || englishLabel
   }
 
-  const total = FORM_FIELDS.length
-  const completed = FORM_FIELDS.filter((field) => displayData[field.key]).length
-  const percent = Math.round((completed / total) * 100)
+  // Count core fields + extra fields
+  const totalCore = FORM_FIELDS.length
+  const completedCore = FORM_FIELDS.filter((f) => displayData[f.key]).length
 
-  function startEdit(field) {
-    setEditing(field.key)
-    setDraft(displayData[field.key] || '')
+  const totalExtra = extraFieldDefs.length
+  const completedExtra = extraFieldDefs.filter((f) => displayExtra[f.key]).length
+
+  const total = totalCore + totalExtra
+  const completed = completedCore + completedExtra
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  function triggerPeek(key) {
+    setPeekedFields((prev) => ({ ...prev, [key]: true }))
+    setTimeout(() => {
+      setPeekedFields((prev) => ({ ...prev, [key]: false }))
+    }, 5000)
+  }
+
+  function startEdit(fieldKey, isExtra = false) {
+    setEditing({ isExtra, key: fieldKey })
+    setDraft((isExtra ? displayExtra[fieldKey] : displayData[fieldKey]) || '')
     setLocalError('')
   }
 
   async function saveEdit(event) {
     event.preventDefault()
+    if (!editing) return
     setBusy(true)
-    const error = await onEditField(editing, draft.trim() ? draft : null)
+    const val = draft.trim() ? draft.trim() : null
+    let error = null
+    if (editing.isExtra) {
+      if (onEditExtraField) {
+        error = await onEditExtraField(editing.key, val)
+      }
+    } else {
+      if (onEditField) {
+        error = await onEditField(editing.key, val)
+      }
+    }
     setBusy(false)
     if (error) {
       setLocalError(error)
@@ -67,6 +96,12 @@ export default function FormSummary({
       setEditing(null)
       setLocalError('')
     }
+  }
+
+  const domainCategoryTitles = {
+    medical: '🏥 Medical & Clinical Details',
+    education: '🎓 Education & Academic Details',
+    government: '🏛️ Government Scheme Details',
   }
 
   return (
@@ -134,18 +169,27 @@ export default function FormSummary({
           )
         )}
 
+        {/* Core Personal Fields */}
+        <div className="field-group-header">
+          <span>Personal Details (12 Fields)</span>
+        </div>
+
         <ul className="field-list">
           {FORM_FIELDS.map((field) => {
-            const value = displayData[field.key]
+            const rawValue = displayData[field.key]
             const label = getFieldLabel(field.key, field.label)
             const error = fieldErrors[field.key]
             const justUpdated = updatedFields.includes(field.key)
+            const isSensitive = SENSITIVE_FIELDS.has(field.key)
+            const isPeeked = Boolean(peekedFields[field.key])
+            const maskedValue = privacyMask && rawValue ? maskFieldValue(field.key, rawValue, isPeeked) : rawValue
+
             let className = 'field-item'
-            if (!value) className += ' field-missing'
+            if (!rawValue) className += ' field-missing'
             if (justUpdated) className += ' field-updated'
             if (error) className += ' field-invalid'
 
-            if (editing === field.key) {
+            if (editing && !editing.isExtra && editing.key === field.key) {
               return (
                 <li key={field.key} className={className}>
                   <form className="field-edit" onSubmit={saveEdit}>
@@ -178,27 +222,135 @@ export default function FormSummary({
               <li key={field.key} className={className}>
                 <div className="field-row">
                   <span className="field-label">{label}</span>
-                  <button
-                    type="button"
-                    className="edit-link"
-                    onClick={() => startEdit(field)}
-                    aria-label={`Edit ${label}`}
-                  >
-                    Edit
-                  </button>
+                  <div className="field-actions-row">
+                    {privacyMask && isSensitive && rawValue && (
+                      <button
+                        type="button"
+                        className={`peek-button ${isPeeked ? 'peek-active' : ''}`}
+                        onClick={() => triggerPeek(field.key)}
+                        title="Reveal field for 5 seconds"
+                        aria-label={`Peek ${label} for 5 seconds`}
+                      >
+                        {isPeeked ? 'Hide' : 'Peek 5s'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="edit-link"
+                      onClick={() => startEdit(field.key, false)}
+                      aria-label={`Edit ${label}`}
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
-                <span className="field-value">{value || (adminMode ? 'Not yet provided' : (FIELD_EMPTY_PLACEHOLDERS[language] || 'Not yet provided'))}</span>
+                <span className="field-value">
+                  {maskedValue || (adminMode ? 'Not yet provided' : (FIELD_EMPTY_PLACEHOLDERS[language] || 'Not yet provided'))}
+                </span>
                 {error && <span className="field-error">{error}</span>}
               </li>
             )
           })}
         </ul>
 
+        {/* Extra Domain Fields */}
+        {extraFieldDefs.length > 0 && (
+          <>
+            <div className="field-group-header domain-group-header">
+              <span>{domainCategoryTitles[formType] || 'Additional Domain Details'}</span>
+            </div>
+
+            <ul className="field-list">
+              {extraFieldDefs.map((extraField) => {
+                const rawValue = displayExtra[extraField.key]
+                const label = extraField.label
+                const isSensitive = SENSITIVE_FIELDS.has(extraField.key)
+                const isPeeked = Boolean(peekedFields[extraField.key])
+                const maskedValue = privacyMask && rawValue ? maskFieldValue(extraField.key, rawValue, isPeeked) : rawValue
+
+                let className = 'field-item domain-field-item'
+                if (!rawValue) className += ' field-missing'
+
+                if (editing && editing.isExtra && editing.key === extraField.key) {
+                  return (
+                    <li key={extraField.key} className={className}>
+                      <form className="field-edit" onSubmit={saveEdit}>
+                        <label className="field-label" htmlFor={`edit-extra-${extraField.key}`}>
+                          {label}
+                        </label>
+                        <input
+                          id={`edit-extra-${extraField.key}`}
+                          className="field-input"
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          autoFocus
+                          maxLength={300}
+                        />
+                        {localError && <p className="field-error">{localError}</p>}
+                        <div className="field-edit-actions">
+                          <button type="submit" className="small-button primary" disabled={busy}>
+                            {busy ? 'Saving…' : 'Save'}
+                          </button>
+                          <button type="button" className="small-button" onClick={() => setEditing(null)} disabled={busy}>
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </li>
+                  )
+                }
+
+                return (
+                  <li key={extraField.key} className={className}>
+                    <div className="field-row">
+                      <span className="field-label">{label}</span>
+                      <div className="field-actions-row">
+                        {privacyMask && isSensitive && rawValue && (
+                          <button
+                            type="button"
+                            className={`peek-button ${isPeeked ? 'peek-active' : ''}`}
+                            onClick={() => triggerPeek(extraField.key)}
+                            title="Reveal field for 5 seconds"
+                            aria-label={`Peek ${label} for 5 seconds`}
+                          >
+                            {isPeeked ? 'Hide' : 'Peek 5s'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="edit-link"
+                          onClick={() => startEdit(extraField.key, true)}
+                          aria-label={`Edit ${label}`}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                    <span className="field-value">
+                      {maskedValue || (adminMode ? 'Not yet provided' : (FIELD_EMPTY_PLACEHOLDERS[language] || 'Not yet provided'))}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
+
         <div className="summary-actions">
           <button type="button" className="primary-action" onClick={onReview}>
             Review & create PDF
           </button>
           <div className="summary-secondary">
+            {onOpenSavePinModal && (
+              <button
+                type="button"
+                className="reset-button pin-save-action"
+                onClick={onOpenSavePinModal}
+                title="Save form with custom or auto-generated 4-digit PIN"
+              >
+                🔑 Save & PIN
+              </button>
+            )}
             <button type="button" className="reset-button" onClick={onSavedForms}>
               Saved forms
             </button>

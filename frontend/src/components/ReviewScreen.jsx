@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
-import { generatePdf, validateForm } from '../services/api.js'
-import { FORM_FIELDS } from '../utils/languages.js'
+import { generatePdf, validateForm, submitToPortal } from '../services/api.js'
+import { FORM_FIELDS, DOMAIN_EXTRA_FIELDS } from '../utils/languages.js'
 
-// Final review: edit values, validate, preview the PDF, confirm, download.
-// The PDF is only created from validated values, and the backend checks again.
-// Props:
-//   formData:     values to review (from the chat/summary)
-//   language:     language code for the PDF
-//   onBack()      return to the chat
-//   onConfirm(values) -> Promise<void>  store the confirmed values
-export default function ReviewScreen({ formData, englishFormData, language, onBack, onConfirm }) {
+// Final review: edit core & domain values, validate, preview the PDF, confirm, download, and dispatch portal submission.
+export default function ReviewScreen({
+  formData = {},
+  englishFormData = {},
+  language = 'en',
+  onBack,
+  onConfirm,
+  formType = 'general',
+  extraFields = {},
+  englishExtraFields = {},
+  formId = null,
+  onFinishAndErase,
+}) {
   const [useEnglish, setUseEnglish] = useState(language === 'en')
-  const [draft, setDraft] = useState(() => (language === 'en' || !englishFormData ? { ...formData } : { ...englishFormData }))
+  const [draft, setDraft] = useState(() =>
+    language === 'en' || !englishFormData ? { ...formData } : { ...englishFormData }
+  )
+  const [extraDraft, setExtraDraft] = useState(() =>
+    language === 'en' || !englishExtraFields ? { ...extraFields } : { ...englishExtraFields }
+  )
   const [errors, setErrors] = useState({})
   const [validated, setValidated] = useState(false)
   const [message, setMessage] = useState('')
@@ -19,9 +29,13 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
   const [busy, setBusy] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submissionResult, setSubmissionResult] = useState(null)
+  const [showPayload, setShowPayload] = useState(false)
+
   const previewUrlRef = useRef('')
 
-  // Free the preview's object URL when it changes or the screen closes.
+  // Free preview object URL on unmount or URL replacement
   useEffect(() => {
     return () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -39,14 +53,22 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
     setPreviewUrl(url)
   }
 
-  function editField(key, value) {
+  function editCoreField(key, value) {
     setDraft((prev) => ({ ...prev, [key]: value.trim() ? value : null }))
     setValidated(false)
     setConfirmed(false)
     replacePreview('')
   }
 
+  function editExtraField(key, value) {
+    setExtraDraft((prev) => ({ ...prev, [key]: value.trim() ? value : null }))
+    setValidated(false)
+    setConfirmed(false)
+    replacePreview('')
+  }
+
   const activeLanguage = useEnglish ? 'en' : language
+  const domainFields = DOMAIN_EXTRA_FIELDS[formType] || []
 
   async function checkDetails() {
     setBusy('check')
@@ -57,11 +79,11 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
       const ok = result.all_required_present
       setValidated(ok)
       if (ok) {
-        showMessage('All details are valid. You can preview the PDF and confirm.')
+        showMessage('All personal details are valid. You can preview the PDF, confirm, or dispatch to the portal.')
       } else if (Object.keys(result.validation_errors).length > 0) {
-        showMessage('Some values need correction. See the messages under each field.', true)
+        showMessage('Some personal details need correction. Check the error markers.', true)
       } else {
-        showMessage(`Please fill in: ${result.missing_fields.length} field(s) are still empty.`, true)
+        showMessage(`Please fill in remaining required fields (${result.missing_fields.length} core field(s) empty).`, true)
       }
     } catch (err) {
       showMessage(err.message, true)
@@ -75,7 +97,7 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
     try {
       const blob = await generatePdf(draft, activeLanguage, 'inline')
       replacePreview(URL.createObjectURL(blob))
-      showMessage('Preview ready. Check it, then confirm.')
+      showMessage('PDF preview generated successfully. Verify details and confirm.')
     } catch (err) {
       showMessage(err.message, true)
     } finally {
@@ -86,9 +108,11 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
   async function confirm() {
     setBusy('confirm')
     try {
-      await onConfirm(draft)
+      if (onConfirm) {
+        await onConfirm(draft, extraDraft)
+      }
       setConfirmed(true)
-      showMessage('Form confirmed. You can now download the PDF.')
+      showMessage('Form confirmed and saved. You can now download the official PDF or dispatch to the portal.')
     } catch (err) {
       showMessage(err.message, true)
     } finally {
@@ -103,7 +127,9 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = useEnglish ? 'formease_application_english.pdf' : `formease_application_${language}.pdf`
+      link.download = useEnglish
+        ? `formease_${formType}_application_english.pdf`
+        : `formease_${formType}_application_${language}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -115,17 +141,44 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
     }
   }
 
+  async function handlePortalSubmit() {
+    setSubmitting(true)
+    setMessage('')
+    try {
+      // Use standardized English payload for official portal dispatch
+      const payload = {
+        form_type: formType,
+        english_form_data: useEnglish ? draft : (englishFormData || draft),
+        english_extra_fields: useEnglish ? extraDraft : (englishExtraFields || extraDraft),
+        form_id: formId,
+      }
+      const result = await submitToPortal(payload)
+      setSubmissionResult(result)
+      showMessage(`Successfully dispatched to ${result.target_portal}! Acknowledgement ID: ${result.acknowledgement_id}`)
+    } catch (err) {
+      showMessage(err.message || 'Failed to submit to government portal.', true)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const domainSectionTitles = {
+    medical: '🏥 Hospital & Medical Specialized Fields',
+    education: '🎓 Education & Academic Specialized Fields',
+    government: '🏛️ Government Scheme Specialized Fields',
+  }
+
   return (
     <section className="review-screen" aria-labelledby="review-title">
       <div className="review-header">
         <button type="button" className="back-button" onClick={onBack}>
           ← Back to chat
         </button>
-        <h2 id="review-title">Review your form</h2>
+        <h2 id="review-title">Review & Finalize Application</h2>
         <p className="review-subtitle">
           {useEnglish
             ? 'Official Form Collector View: review and export the application in standardized English.'
-            : 'Check every value in your native language. Edit anything that is wrong, then create the PDF.'}
+            : 'Check every value in your native language. Edit anything that is wrong, then create the PDF or dispatch to portal.'}
         </p>
 
         {language !== 'en' && (
@@ -137,6 +190,7 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
               onClick={() => {
                 setUseEnglish(false)
                 setDraft({ ...formData })
+                setExtraDraft({ ...extraFields })
                 setValidated(false)
                 setConfirmed(false)
                 replacePreview('')
@@ -149,7 +203,8 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
               className={`review-lang-btn ${useEnglish ? 'active' : ''}`}
               onClick={() => {
                 setUseEnglish(true)
-                setDraft(englishFormData ? { ...englishFormData } : { ...formData })
+                setDraft(englishFormData && Object.keys(englishFormData).length > 0 ? { ...englishFormData } : { ...formData })
+                setExtraDraft(englishExtraFields && Object.keys(englishExtraFields).length > 0 ? { ...englishExtraFields } : { ...extraFields })
                 setValidated(false)
                 setConfirmed(false)
                 replacePreview('')
@@ -163,33 +218,86 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
 
       <div className="review-body">
         <div className="review-fields">
+          <h3 className="review-section-heading">Personal Details (12 Canonical Fields)</h3>
           {FORM_FIELDS.map((field) => (
             <label key={field.key} className={`review-field ${errors[field.key] ? 'review-field-invalid' : ''}`}>
-              <span className="review-label">{field.label}{!draft[field.key] && <em> (required)</em>}</span>
+              <span className="review-label">
+                {field.label}
+                {!draft[field.key] && <em> (required)</em>}
+              </span>
               <input
                 className="review-input"
                 value={draft[field.key] || ''}
-                onChange={(event) => editField(field.key, event.target.value)}
+                onChange={(event) => editCoreField(field.key, event.target.value)}
                 maxLength={300}
               />
               {errors[field.key] && <span className="field-error">{errors[field.key]}</span>}
             </label>
           ))}
+
+          {/* Domain Extra Fields */}
+          {domainFields.length > 0 && (
+            <div className="domain-review-block">
+              <h3 className="review-section-heading domain-heading">
+                {domainSectionTitles[formType] || 'Additional Domain Details'}
+              </h3>
+              {domainFields.map((df) => (
+                <label key={df.key} className="review-field domain-review-field">
+                  <span className="review-label">{df.label}</span>
+                  <input
+                    className="review-input"
+                    value={extraDraft[df.key] || ''}
+                    onChange={(event) => editExtraField(df.key, event.target.value)}
+                    maxLength={300}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="review-preview">
           <div className="review-actions">
-            <button type="button" className="small-button" onClick={checkDetails} disabled={busy !== ''}>
+            <button
+              type="button"
+              className="small-button"
+              onClick={checkDetails}
+              disabled={busy !== '' || submitting}
+            >
               {busy === 'check' ? 'Checking…' : 'Check details'}
             </button>
-            <button type="button" className="small-button primary" onClick={previewPdf} disabled={!validated || busy !== ''}>
+            <button
+              type="button"
+              className="small-button primary"
+              onClick={previewPdf}
+              disabled={!validated || busy !== '' || submitting}
+            >
               {busy === 'preview' ? 'Creating preview…' : 'Preview PDF'}
             </button>
-            <button type="button" className="small-button primary" onClick={confirm} disabled={!validated || confirmed || busy !== ''}>
+            <button
+              type="button"
+              className="small-button primary"
+              onClick={confirm}
+              disabled={!validated || confirmed || busy !== '' || submitting}
+            >
               {confirmed ? 'Confirmed ✓' : busy === 'confirm' ? 'Confirming…' : 'Confirm details'}
             </button>
-            <button type="button" className="small-button primary" onClick={download} disabled={!confirmed || busy !== ''}>
+            <button
+              type="button"
+              className="small-button primary"
+              onClick={download}
+              disabled={!confirmed || busy !== '' || submitting}
+            >
               {busy === 'download' ? 'Downloading…' : 'Download PDF'}
+            </button>
+            <button
+              type="button"
+              className="small-button portal-submit-btn"
+              onClick={handlePortalSubmit}
+              disabled={submitting || busy !== ''}
+              title="Dispatch verified English payload to target government or healthcare intake portal"
+            >
+              {submitting ? 'Submitting to Portal…' : '🚀 Submit to Portal'}
             </button>
           </div>
 
@@ -199,10 +307,68 @@ export default function ReviewScreen({ formData, englishFormData, language, onBa
             </p>
           )}
 
+          {/* Submission Receipt Card & Dispatched Payload Inspector */}
+          {submissionResult && (
+            <div className="submission-receipt-card" role="region" aria-label="Portal Submission Receipt">
+              <div className="receipt-header">
+                <span className="receipt-status-badge">✓ DISPATCHED</span>
+                <h4 className="receipt-title">Portal Submission Receipt</h4>
+              </div>
+              <div className="receipt-meta-grid">
+                <div className="receipt-meta-item">
+                  <span className="receipt-meta-label">Acknowledgement ID</span>
+                  <strong className="receipt-meta-value receipt-ack-id">{submissionResult.acknowledgement_id}</strong>
+                </div>
+                <div className="receipt-meta-item">
+                  <span className="receipt-meta-label">Standard & Protocol</span>
+                  <span className="receipt-meta-value protocol-pill">{submissionResult.protocol_standard}</span>
+                </div>
+                <div className="receipt-meta-item full-width">
+                  <span className="receipt-meta-label">Target Portal</span>
+                  <span className="receipt-meta-value">{submissionResult.target_portal}</span>
+                </div>
+                <div className="receipt-meta-item">
+                  <span className="receipt-meta-label">Dispatched At</span>
+                  <span className="receipt-meta-value">{new Date(submissionResult.submitted_at).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="payload-inspector-container">
+                <button
+                  type="button"
+                  className="payload-toggle-btn"
+                  onClick={() => setShowPayload(!showPayload)}
+                  aria-expanded={showPayload}
+                >
+                  {showPayload ? '▼ Hide Dispatched Payload' : '▶ View Dispatched Payload (JSON)'}
+                </button>
+                {showPayload && (
+                  <pre className="payload-json-box">
+                    <code>{JSON.stringify(submissionResult.dispatched_payload, null, 2)}</code>
+                  </pre>
+                )}
+              </div>
+            </div>
+          )}
+
           {previewUrl ? (
             <iframe className="pdf-preview" src={previewUrl} title="PDF preview" />
           ) : (
             <div className="pdf-placeholder">The PDF preview appears here after the details are valid.</div>
+          )}
+
+          {/* Kiosk Wipe / Reset in Review Screen */}
+          {onFinishAndErase && (
+            <div className="review-kiosk-erase-container">
+              <button
+                type="button"
+                className="danger-button kiosk-wipe-btn"
+                onClick={onFinishAndErase}
+                title="Wipe all data from memory and reset kiosk session"
+              >
+                🗑️ Finish & Erase My Data
+              </button>
+            </div>
           )}
         </div>
       </div>

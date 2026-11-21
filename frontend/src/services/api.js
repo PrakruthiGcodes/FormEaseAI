@@ -4,6 +4,28 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+// Ephemeral per-session token generated in memory.
+// Rotated on kiosk wipe to ensure strict session isolation.
+let currentSessionToken = null
+
+export function getSessionToken() {
+  if (!currentSessionToken) {
+    currentSessionToken =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  }
+  return currentSessionToken
+}
+
+export function rotateSessionToken() {
+  currentSessionToken =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  return currentSessionToken
+}
+
 // Build an Error from a failed response.
 // FastAPI sends { detail: "text" } or { detail: { message, code, ... } }.
 async function errorFromResponse(response) {
@@ -47,7 +69,14 @@ async function request(path, options = {}) {
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
-// ----- Health and status -----
+function getAuthHeaders() {
+  return {
+    ...jsonHeaders,
+    'X-Session-Token': getSessionToken(),
+  }
+}
+
+// ----- Health, Status, and Form Types -----
 
 // GET /api/health
 export async function fetchHealth() {
@@ -61,14 +90,20 @@ export async function fetchDatabaseStatus() {
   return response.json()
 }
 
+// GET /api/form-types
+export async function fetchFormTypes() {
+  const response = await request('/api/form-types')
+  return response.json()
+}
+
 // ----- Chat -----
 
 // POST /api/chat
-// payload: { message, history, form_data, language }
+// payload: { message, history, form_data, english_form_data, language, form_type, extra_fields, english_extra_fields }
 export async function sendChatMessage(payload) {
   const response = await request('/api/chat', {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   })
   return response.json()
@@ -96,42 +131,81 @@ export async function generatePdf(formData, language, disposition = 'attachment'
   return response.blob()
 }
 
-// ----- Saved forms (MongoDB) -----
+// ----- Saved forms (MongoDB) with session isolation and PIN protection -----
 
 // POST /api/forms
-export async function createSavedForm(language) {
+export async function createSavedForm(language, accessPin = null, formType = 'general') {
+  const body = { language, form_type: formType }
+  if (accessPin) body.access_pin = accessPin
   const response = await request('/api/forms', {
     method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify({ language }),
+    headers: getAuthHeaders(),
+    body: JSON.stringify(body),
+  })
+  return response.json()
+}
+
+// POST /api/forms/unlock
+export async function unlockSavedForm(referenceCode, accessPin) {
+  const response = await request('/api/forms/unlock', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      reference_code: referenceCode,
+      access_pin: accessPin,
+    }),
   })
   return response.json()
 }
 
 // GET /api/forms
 export async function listSavedForms() {
-  const response = await request('/api/forms')
+  const response = await request('/api/forms', {
+    headers: getAuthHeaders(),
+  })
   return response.json()
 }
 
 // GET /api/forms/{id}
-export async function getSavedForm(formId) {
-  const response = await request(`/api/forms/${formId}`)
+export async function getSavedForm(formId, accessPin = null) {
+  const headers = getAuthHeaders()
+  if (accessPin) headers['X-Access-Pin'] = accessPin
+  const response = await request(`/api/forms/${formId}`, { headers })
   return response.json()
 }
 
 // PUT /api/forms/{id}
-// body: { messages, form_data, language, status: 'in_progress' | 'confirmed' }
-export async function saveForm(formId, body) {
+// body: { messages, form_data, language, status: 'in_progress' | 'confirmed', form_type, extra_fields, english_extra_fields }
+export async function saveForm(formId, body, accessPin = null) {
+  const headers = getAuthHeaders()
+  if (accessPin) headers['X-Access-Pin'] = accessPin
   const response = await request(`/api/forms/${formId}`, {
     method: 'PUT',
-    headers: jsonHeaders,
+    headers,
     body: JSON.stringify(body),
   })
   return response.json()
 }
 
 // DELETE /api/forms/{id}
-export async function deleteSavedForm(formId) {
-  await request(`/api/forms/${formId}`, { method: 'DELETE' })
+export async function deleteSavedForm(formId, accessPin = null) {
+  const headers = getAuthHeaders()
+  if (accessPin) headers['X-Access-Pin'] = accessPin
+  await request(`/api/forms/${formId}`, {
+    method: 'DELETE',
+    headers,
+  })
+}
+
+// ----- Standards-based portal submission -----
+
+// POST /api/submit
+// payload: { form_type, english_form_data, english_extra_fields, form_id }
+export async function submitToPortal(payload) {
+  const response = await request('/api/submit', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify(payload),
+  })
+  return response.json()
 }

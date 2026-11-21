@@ -125,3 +125,144 @@ export const INPUT_PLACEHOLDERS = {
   gu: 'અહીં લખો અથવા બોલો…',
   pa: 'ਇੱਥੇ ਲਿਖੋ ਜਾਂ ਬੋਲੋ…',
 }
+
+// Default form types fallback if backend /api/form-types is unreachable
+export const DEFAULT_FORM_TYPES = [
+  {
+    id: 'general',
+    title: 'Personal Details Form',
+    category: 'General Citizen',
+    icon: '👤',
+    description: '12 core personal, demographic, and contact fields for any general government or local service.',
+    extra_fields: [],
+  },
+  {
+    id: 'medical',
+    title: 'Hospital & Medical Form',
+    category: 'Healthcare & Clinical',
+    icon: '🏥',
+    description: 'General personal details plus primary symptoms, medical history, blood group, and emergency contact.',
+    extra_fields: [
+      { key: 'symptoms_or_reason', label: 'Symptoms / Visit Reason' },
+      { key: 'medical_history', label: 'Medical History' },
+      { key: 'blood_group', label: 'Blood Group' },
+      { key: 'emergency_contact', label: 'Emergency Contact' },
+    ],
+  },
+  {
+    id: 'education',
+    title: 'Education & Student Form',
+    category: 'Schools & Universities',
+    icon: '🎓',
+    description: 'General personal details plus previous institution, course/degree, graduation year, and percentage/grade.',
+    extra_fields: [
+      { key: 'previous_institution', label: 'Previous Institution' },
+      { key: 'course_or_degree', label: 'Course / Degree' },
+      { key: 'passed_out_year', label: 'Passed Out Year' },
+      { key: 'percentage_or_grade', label: 'Percentage / Grade' },
+    ],
+  },
+  {
+    id: 'government',
+    title: 'Government Scheme Form',
+    category: 'Direct Benefit Transfer (DBT)',
+    icon: '🏛️',
+    description: 'General personal details plus scheme name, approximate annual family income, and ration/ID card type.',
+    extra_fields: [
+      { key: 'scheme_name', label: 'Scheme Name' },
+      { key: 'annual_family_income', label: 'Annual Family Income' },
+      { key: 'ration_or_id_type', label: 'Ration / ID Type' },
+    ],
+  },
+]
+
+// Domain extra fields metadata
+export const DOMAIN_EXTRA_FIELDS = {
+  general: [],
+  medical: [
+    { key: 'symptoms_or_reason', label: 'Symptoms / Visit Reason' },
+    { key: 'medical_history', label: 'Medical History' },
+    { key: 'blood_group', label: 'Blood Group' },
+    { key: 'emergency_contact', label: 'Emergency Contact' },
+  ],
+  education: [
+    { key: 'previous_institution', label: 'Previous Institution' },
+    { key: 'course_or_degree', label: 'Course / Degree' },
+    { key: 'passed_out_year', label: 'Passed Out Year' },
+    { key: 'percentage_or_grade', label: 'Percentage / Grade' },
+  ],
+  government: [
+    { key: 'scheme_name', label: 'Scheme Name' },
+    { key: 'annual_family_income', label: 'Annual Family Income' },
+    { key: 'ration_or_id_type', label: 'Ration / ID Type' },
+  ],
+}
+
+// Sensitive PII fields requiring masking when Privacy Shield is enabled
+export const SENSITIVE_FIELDS = new Set([
+  'full_name',
+  'date_of_birth',
+  'mobile_number',
+  'email',
+  'address',
+  'emergency_contact',
+])
+
+/**
+ * Visually mask sensitive PII fields unless peek is active.
+ * - mobile_number: ••••••8210
+ * - email: r****l@gmail.com
+ * - full_name: R***** K****
+ * - date_of_birth: ••/••/••••
+ * - address: 123••••••••••
+ * - emergency_contact: ••••••9912 or N**** S****
+ */
+export function maskFieldValue(fieldKey, value, isPeeked = false) {
+  if (!value || isPeeked) return value
+  if (!SENSITIVE_FIELDS.has(fieldKey)) return value
+
+  const str = String(value).trim()
+  if (!str) return value
+
+  if (fieldKey === 'mobile_number') {
+    if (str.length <= 4) return '••••'
+    return '•'.repeat(Math.max(str.length - 4, 4)) + str.slice(-4)
+  }
+
+  if (fieldKey === 'email') {
+    const parts = str.split('@')
+    if (parts.length === 2 && parts[0].length > 1) {
+      const user = parts[0]
+      const domain = parts[1]
+      const maskedUser = user[0] + '*'.repeat(Math.max(user.length - 2, 2)) + (user.length > 2 ? user.slice(-1) : '')
+      return `${maskedUser}@${domain}`
+    }
+    return '••••••••'
+  }
+
+  if (fieldKey === 'full_name') {
+    return str
+      .split(/\s+/)
+      .map((word) => (word.length <= 1 ? word : word[0] + '*'.repeat(Math.max(word.length - 1, 3))))
+      .join(' ')
+  }
+
+  if (fieldKey === 'date_of_birth') {
+    return '••/••/••••'
+  }
+
+  if (fieldKey === 'emergency_contact') {
+    if (/^\d+$/.test(str.replace(/[\s+-]/g, ''))) {
+      if (str.length <= 4) return '••••'
+      return '•'.repeat(Math.max(str.length - 4, 4)) + str.slice(-4)
+    }
+    return str
+      .split(/\s+/)
+      .map((word) => (word.length <= 1 ? word : word[0] + '*'.repeat(Math.max(word.length - 1, 3))))
+      .join(' ')
+  }
+
+  // address / default sensitive
+  if (str.length <= 6) return '••••••'
+  return str.slice(0, 3) + '••••••••••'
+}
