@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
-from app.api.routes import chat, form, forms, gemini, health
+from app.api.routes import chat, form, form_types, forms, gemini, health, submit
 from app.core.config import settings
 from app.core.crypto import DecryptionFailed, EncryptionUnavailable
 from app.core.database import STOPPED_MESSAGE, DatabaseUnavailable, safe_error_summary
@@ -107,3 +107,5 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(gemini.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(forms.router, prefix="/api")
+app.include_router(form_types.router, prefix="/api")
+app.include_router(submit.router, prefix="/api")

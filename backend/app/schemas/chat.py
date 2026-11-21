@@ -107,6 +107,9 @@ class ChatRequest(BaseModel):
     form_data: FormData = Field(default_factory=FormData)
     english_form_data: Optional[FormData] = Field(default=None)
     language: str = Field(default="en", max_length=10)
+    form_type: str = Field(default="general", max_length=20)
+    extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
+    english_extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
 
     @field_validator("message", mode="before")
     @classmethod
@@ -137,6 +140,11 @@ class ChatResponse(BaseModel):
     conversation_complete: bool
     detected_language: str
     source: Literal["gemini"]
+    form_type: str = "general"
+    extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
+    english_extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
+    missing_extra_fields: list[str] = Field(default_factory=list)
+    completed_extra_fields: list[str] = Field(default_factory=list)
 
 
 class FormValidateRequest(BaseModel):
@@ -161,6 +169,7 @@ MAX_SAVED_MESSAGES = 200
 class CreateFormRequest(BaseModel):
     language: str = Field(default="en", max_length=10)
     access_pin: Optional[str] = Field(default=None, pattern=r"^\d{4}$")
+    form_type: str = Field(default="general", max_length=20)
 
 
 class CreateFormResponse(BaseModel):
@@ -170,6 +179,7 @@ class CreateFormResponse(BaseModel):
     created_at: str
     reference_code: str
     access_pin_issued: str
+    form_type: str = "general"
 
 
 class UnlockFormRequest(BaseModel):
@@ -184,6 +194,9 @@ class FormSaveRequest(BaseModel):
     form_data: FormData = Field(default_factory=FormData)
     language: str = Field(default="en", max_length=10)
     status: Literal["in_progress", "confirmed"] = "in_progress"
+    form_type: str = Field(default="general", max_length=20)
+    extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
+    english_extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
 
     @field_validator("language")
     @classmethod
@@ -204,6 +217,7 @@ class FormSummaryItem(BaseModel):
     created_at: str
     updated_at: str
     reference_code: Optional[str] = None
+    form_type: str = "general"
 
 
 class FormDetail(BaseModel):
@@ -220,6 +234,9 @@ class FormDetail(BaseModel):
     created_at: str
     updated_at: str
     reference_code: Optional[str] = None
+    form_type: str = "general"
+    extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
+    english_extra_fields: dict[str, Optional[str]] = Field(default_factory=dict)
 
 
 # ----- Gemini output (plain types for the structured-output schema) -----
@@ -240,6 +257,23 @@ class GeminiExtraction(BaseModel):
     pin_code: Optional[str] = None
     occupation: Optional[str] = None
     education: Optional[str] = None
+
+    # Medical Domain Extensions
+    symptoms_or_reason: Optional[str] = None
+    medical_history: Optional[str] = None
+    blood_group: Optional[str] = None
+    emergency_contact: Optional[str] = None
+
+    # Education Domain Extensions
+    previous_institution: Optional[str] = None
+    course_or_degree: Optional[str] = None
+    passed_out_year: Optional[str] = None
+    percentage_or_grade: Optional[str] = None
+
+    # Government Scheme Domain Extensions
+    scheme_name: Optional[str] = None
+    annual_family_income: Optional[str] = None
+    ration_or_id_type: Optional[str] = None
 
 
 class GeminiTurnOutput(BaseModel):

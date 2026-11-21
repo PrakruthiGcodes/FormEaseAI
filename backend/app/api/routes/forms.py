@@ -55,6 +55,7 @@ def create_form(
         language=request.language,
         session_token=x_session_token,
         access_pin=request.access_pin,
+        form_type=request.form_type,
     )
     logger.info("Form created: id=%s language=%s", result["id"], request.language)
     return result

@@ -156,6 +156,7 @@ def create_form(
     language: str,
     session_token: Optional[str] = None,
     access_pin: Optional[str] = None,
+    form_type: str = "general",
 ) -> dict:
     """Create an empty in-progress form with reference code and PIN protection."""
     form_id = str(uuid.uuid4())
@@ -184,10 +185,16 @@ def create_form(
             "completed_count": 0,
             "total_fields": TOTAL_FIELDS,
             "reference_code": ref_code,
+            "form_type": form_type,
             "pin_hash": pin_hashed.hex(),
             "pin_salt": salt.hex(),
             "session_token_hash": session_hash,
-            "data_enc": encrypt_json({"messages": [], "form_data": empty}),
+            "data_enc": encrypt_json({
+                "messages": [],
+                "form_data": empty,
+                "extra_fields": {},
+                "english_extra_fields": {},
+            }),
         }
         col.insert_one(doc)
 
@@ -198,6 +205,7 @@ def create_form(
         "created_at": now,
         "reference_code": ref_code,
         "access_pin_issued": pin,
+        "form_type": form_type,
     }
 
 
@@ -258,6 +266,9 @@ def unlock_form(
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
         reference_code=doc.get("reference_code"),
+        form_type=doc.get("form_type", "general"),
+        extra_fields=stored.get("extra_fields", {}),
+        english_extra_fields=stored.get("english_extra_fields", {}),
     )
 
 
@@ -278,7 +289,7 @@ def list_forms(
         cursor = col.find(
             {"session_token_hash": token_hash},
             {"status": 1, "language": 1, "completed_count": 1, "total_fields": 1,
-             "created_at": 1, "updated_at": 1, "reference_code": 1},
+             "created_at": 1, "updated_at": 1, "reference_code": 1, "form_type": 1},
         ).sort("updated_at", -1).limit(limit)
         docs = list(cursor)
 
@@ -292,6 +303,7 @@ def list_forms(
             created_at=doc["created_at"],
             updated_at=doc["updated_at"],
             reference_code=doc.get("reference_code"),
+            form_type=doc.get("form_type", "general"),
         )
         for doc in docs
     ]
@@ -327,6 +339,9 @@ def get_form(
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
         reference_code=doc.get("reference_code"),
+        form_type=doc.get("form_type", "general"),
+        extra_fields=stored.get("extra_fields", {}),
+        english_extra_fields=stored.get("english_extra_fields", {}),
     )
 
 
@@ -363,7 +378,13 @@ def save_form(
         "language": request.language,
         "updated_at": now,
         "completed_count": completed,
-        "data_enc": encrypt_json({"messages": messages, "form_data": normalised}),
+        "form_type": request.form_type,
+        "data_enc": encrypt_json({
+            "messages": messages,
+            "form_data": normalised,
+            "extra_fields": request.extra_fields,
+            "english_extra_fields": request.english_extra_fields,
+        }),
         **({"confirmed_at": now} if request.status == "confirmed" else {}),
     }
     if session_token and session_token.strip():

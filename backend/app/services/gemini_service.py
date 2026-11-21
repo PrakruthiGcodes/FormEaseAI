@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from app.core.config import settings
 from app.schemas.chat import FIELD_LABELS, FORM_FIELDS, SUPPORTED_LANGUAGES, GeminiTurnOutput
+from app.services.form_types import get_extra_field_keys, get_form_type_info
 
 logger = logging.getLogger("formease.gemini")
 
@@ -150,12 +151,25 @@ def check_model() -> dict:
     return {"model": model_name, "available": True, "error_code": None, "message": "Model is available."}
 
 
-def _system_prompt(language_code: str) -> str:
+def _system_prompt(language_code: str, form_type: str = "general") -> str:
     language_name = SUPPORTED_LANGUAGES.get(language_code, "English")
     field_list = ", ".join(FORM_FIELDS)
+    extra_keys = get_extra_field_keys(form_type)
+    extra_section = ""
+    if extra_keys:
+        extra_list = ", ".join(extra_keys)
+        extra_section = f"""
+DOMAIN EXTENSION FIELDS ({form_type.upper()}): {extra_list}.
+Domain instructions:
+- First collect the 12 core personal details.
+- Once the 12 core personal details are filled, ask for each missing domain field in order ({extra_list}).
+- If the user volunteers domain information early, record it into extracted_data.
+- For non-mandatory fields (like medical_history or email), accept "None", "No", "Skip", "Nothing", or "Don't have" gracefully by storing "None" or "Not Applicable".
+"""
+
     return f"""You are FormEase AI, an accessible, empathetic conversational assistant helping rural and diverse citizens fill out application forms easily through conversation.
 
-FIELDS TO COLLECT (in this order): {field_list}.
+FIELDS TO COLLECT (in this order): {field_list}.{extra_section}
 Labels: {json.dumps(FIELD_LABELS)}
 
 CORE INSTRUCTIONS:
@@ -177,6 +191,7 @@ CORE INSTRUCTIONS:
      * education: Translate to English (e.g. "पदवीधर" -> "Graduate", "दहावी" -> "10th Pass", "प्राथमिक" -> "Primary School").
      * address, city, state: Standardize in English (e.g. "पुणे" -> "Pune", "महाराष्ट्र" -> "Maharashtra").
      * mobile_number, age, pin_code, date_of_birth, email: Format cleanly in digits / standard formats.
+     * Domain fields (symptoms, history, institution, course, scheme, ration type): Translate/standardize into clear English.
 
 4. ACCURACY & CONVERSATION RULES:
    - Ask for ONE missing field at a time in the order above. If the user answered multiple fields in one go, record all of them.
@@ -184,13 +199,19 @@ CORE INSTRUCTIONS:
    - Both "extracted_data" and "english_data" must contain ONLY fields newly provided or corrected in the LATEST message. All other fields must be null.
    - Do not ask again for fields already known in KNOWN FORM DATA. If a user corrects a field, update it.
    - Convert spelled-out numbers (age, PIN code, mobile number) into digits.
-   - "next_question" is the single question for the next missing field, written in {language_name}. Use null only when all 12 fields are complete.
-   - "conversation_complete" is true only when every field in the list is known.
+   - "next_question" is the single question for the next missing field, written in {language_name}. Use null only when all fields are complete.
+   - "conversation_complete" is true only when every required field is known.
    - "detected_language" is the language code the user wrote in (one of: en, hi, kn, ta, te, ml, bn, mr, gu, pa).
    - Return only the JSON object described by the response schema."""
 
 
-def _build_contents(history: list[dict], message: str, known: dict) -> list[types.Content]:
+def _build_contents(
+    history: list[dict],
+    message: str,
+    known: dict,
+    form_type: str = "general",
+    known_extra: Optional[dict] = None,
+) -> list[types.Content]:
     """Turn the conversation into Gemini's content format."""
     contents: list[types.Content] = []
     for turn in history:
@@ -198,9 +219,15 @@ def _build_contents(history: list[dict], message: str, known: dict) -> list[type
         contents.append(types.Content(role=role, parts=[types.Part(text=turn["content"])]))
 
     known_values = {key: value for key, value in known.items() if value is not None}
-    missing = [field for field in FORM_FIELDS if field not in known_values]
+    extra_values = {key: value for key, value in (known_extra or {}).items() if value is not None}
+    missing_core = [field for field in FORM_FIELDS if field not in known_values]
+    missing_extra = [field for field in get_extra_field_keys(form_type) if field not in extra_values]
+    missing = missing_core + missing_extra
+
+    combined_known = {**known_values, **extra_values}
     final_text = (
-        f"KNOWN FORM DATA (JSON): {json.dumps(known_values, ensure_ascii=False)}\n"
+        f"FORM TYPE: {form_type}\n"
+        f"KNOWN FORM DATA (JSON): {json.dumps(combined_known, ensure_ascii=False)}\n"
         f"MISSING FIELDS: {json.dumps(missing)}\n\n"
         f"LATEST USER MESSAGE:\n{message}"
     )
@@ -208,17 +235,24 @@ def _build_contents(history: list[dict], message: str, known: dict) -> list[type
     return contents
 
 
-def generate_turn(message: str, history: list[dict], known: dict, language_code: str) -> GeminiTurnOutput:
+def generate_turn(
+    message: str,
+    history: list[dict],
+    known: dict,
+    language_code: str,
+    form_type: str = "general",
+    known_extra: Optional[dict] = None,
+) -> GeminiTurnOutput:
     """Send one conversation turn to Gemini and return its structured reply."""
     client = _get_client()
     config = types.GenerateContentConfig(
-        system_instruction=_system_prompt(language_code),
+        system_instruction=_system_prompt(language_code, form_type),
         response_mime_type="application/json",
         response_schema=GeminiTurnOutput,
         temperature=0.2,
     )
 
-    contents = _build_contents(history, message, known)
+    contents = _build_contents(history, message, known, form_type, known_extra)
     attempt = 0
     while True:
         try:
