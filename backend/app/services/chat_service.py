@@ -65,6 +65,15 @@ def process_chat(request: ChatRequest) -> ChatResponse:
     merged, updated, errors = merge_form_data(request.form_data, output.extracted_data)
     merged_values = merged.model_dump()
 
+    # Merge English data for administrative form collector / admin
+    if request.language == "en":
+        merged_english = merged
+    elif output.english_data:
+        base_english = request.english_form_data if request.english_form_data else FormData()
+        merged_english, _, _ = merge_form_data(base_english, output.english_data)
+    else:
+        merged_english = request.english_form_data if request.english_form_data else FormData()
+
     missing = [field for field in FORM_FIELDS if merged_values[field] is None]
     completed = [field for field in FORM_FIELDS if merged_values[field] is not None]
     is_complete = not missing
@@ -74,6 +83,7 @@ def process_chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
         reply=output.reply,
         extracted_data=merged,
+        english_data=merged_english,
         updated_fields=updated,
         validation_errors=errors,
         missing_fields=missing,

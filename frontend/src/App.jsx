@@ -17,7 +17,7 @@ import {
   sendChatMessage,
   validateForm,
 } from './services/api.js'
-import { FORM_FIELDS } from './utils/languages.js'
+import { FORM_FIELDS, INITIAL_GREETINGS } from './utils/languages.js'
 import { VOICE_LANGUAGES, hasVoiceSupport } from './utils/speech.js'
 import { clearSavedSession, loadSavedSession, saveSession } from './utils/sessionStorage.js'
 import { getSpeakReplies, setSpeakReplies } from './utils/storage.js'
@@ -34,8 +34,15 @@ function emptyFormData() {
 
 function freshSession(language = 'en') {
   return {
-    messages: [],
+    messages: [
+      {
+        id: 1,
+        role: 'assistant',
+        text: INITIAL_GREETINGS[language] || INITIAL_GREETINGS.en,
+      },
+    ],
     formData: emptyFormData(),
+    englishFormData: emptyFormData(),
     language,
     nextQuestion: null,
     conversationComplete: false,
@@ -43,7 +50,7 @@ function freshSession(language = 'en') {
     validationErrors: {},
     status: 'in_progress',
     formId: null,
-    nextId: 1,
+    nextId: 2,
   }
 }
 
@@ -96,8 +103,9 @@ function App() {
   const [isSending, setIsSending] = useState(false)
   const [view, setView] = useState('chat') // 'chat' | 'review' | 'saved'
   const [speakReplies, setSpeakRepliesState] = useState(getSpeakReplies)
+  const [adminMode, setAdminMode] = useState(false)
 
-  const { messages, formData, language, nextQuestion, conversationComplete, updatedFields, status, formId } =
+  const { messages, formData, englishFormData, language, nextQuestion, conversationComplete, updatedFields, status, formId } =
     session
 
   const speech = useSpeechSynthesis()
@@ -182,7 +190,23 @@ function App() {
   }, [formId, database.available, language])
 
   function setLanguage(code) {
-    setSession((prev) => ({ ...prev, language: code }))
+    setSession((prev) => {
+      let updatedMessages = prev.messages
+      if (prev.messages.length <= 1 && (!prev.messages[0] || prev.messages[0].role === 'assistant')) {
+        updatedMessages = [
+          {
+            id: 1,
+            role: 'assistant',
+            text: INITIAL_GREETINGS[code] || INITIAL_GREETINGS.en,
+          },
+        ]
+      }
+      return {
+        ...prev,
+        language: code,
+        messages: updatedMessages,
+      }
+    })
   }
 
   async function retryBackend() {
@@ -211,12 +235,14 @@ function App() {
         message: text,
         history: toHistory(session.messages).slice(-MAX_HISTORY_MESSAGES),
         form_data: session.formData,
+        english_form_data: session.englishFormData,
         language: session.language,
       })
       setSession((prev) => ({
         ...prev,
         messages: [...prev.messages, { id: prev.nextId, role: 'assistant', text: data.reply }],
         formData: data.extracted_data,
+        englishFormData: data.english_data || prev.englishFormData || data.extracted_data,
         nextQuestion: data.next_question,
         conversationComplete: data.conversation_complete,
         updatedFields: data.updated_fields,
@@ -327,6 +353,7 @@ function App() {
         <main className="app-main">
           <ReviewScreen
             formData={formData}
+            englishFormData={englishFormData || formData}
             language={language}
             onBack={() => setView('chat')}
             onConfirm={handleConfirm}
@@ -361,6 +388,10 @@ function App() {
 
             <FormSummary
               formData={formData}
+              englishFormData={englishFormData || formData}
+              language={language}
+              adminMode={adminMode}
+              onToggleAdminMode={setAdminMode}
               fieldErrors={session.validationErrors}
               updatedFields={updatedFields}
               nextQuestion={nextQuestion}

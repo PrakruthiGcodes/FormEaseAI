@@ -9,8 +9,9 @@ import { FORM_FIELDS } from '../utils/languages.js'
 //   language:     language code for the PDF
 //   onBack()      return to the chat
 //   onConfirm(values) -> Promise<void>  store the confirmed values
-export default function ReviewScreen({ formData, language, onBack, onConfirm }) {
-  const [draft, setDraft] = useState(() => ({ ...formData }))
+export default function ReviewScreen({ formData, englishFormData, language, onBack, onConfirm }) {
+  const [useEnglish, setUseEnglish] = useState(language === 'en')
+  const [draft, setDraft] = useState(() => (language === 'en' || !englishFormData ? { ...formData } : { ...englishFormData }))
   const [errors, setErrors] = useState({})
   const [validated, setValidated] = useState(false)
   const [message, setMessage] = useState('')
@@ -45,6 +46,8 @@ export default function ReviewScreen({ formData, language, onBack, onConfirm }) 
     replacePreview('')
   }
 
+  const activeLanguage = useEnglish ? 'en' : language
+
   async function checkDetails() {
     setBusy('check')
     try {
@@ -70,7 +73,7 @@ export default function ReviewScreen({ formData, language, onBack, onConfirm }) 
   async function previewPdf() {
     setBusy('preview')
     try {
-      const blob = await generatePdf(draft, language, 'inline')
+      const blob = await generatePdf(draft, activeLanguage, 'inline')
       replacePreview(URL.createObjectURL(blob))
       showMessage('Preview ready. Check it, then confirm.')
     } catch (err) {
@@ -96,11 +99,11 @@ export default function ReviewScreen({ formData, language, onBack, onConfirm }) 
   async function download() {
     setBusy('download')
     try {
-      const blob = await generatePdf(draft, language, 'attachment')
+      const blob = await generatePdf(draft, activeLanguage, 'attachment')
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = 'formease_form.pdf'
+      link.download = useEnglish ? 'formease_application_english.pdf' : `formease_application_${language}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -119,7 +122,43 @@ export default function ReviewScreen({ formData, language, onBack, onConfirm }) 
           ← Back to chat
         </button>
         <h2 id="review-title">Review your form</h2>
-        <p className="review-subtitle">Check every value. Edit anything that is wrong, then create the PDF.</p>
+        <p className="review-subtitle">
+          {useEnglish
+            ? 'Official Form Collector View: review and export the application in standardized English.'
+            : 'Check every value in your native language. Edit anything that is wrong, then create the PDF.'}
+        </p>
+
+        {language !== 'en' && (
+          <div className="review-lang-selector" role="group" aria-label="PDF language format">
+            <span className="lang-toggle-label">Form Export Format:</span>
+            <button
+              type="button"
+              className={`review-lang-btn ${!useEnglish ? 'active' : ''}`}
+              onClick={() => {
+                setUseEnglish(false)
+                setDraft({ ...formData })
+                setValidated(false)
+                setConfirmed(false)
+                replacePreview('')
+              }}
+            >
+              👤 Citizen Native ({language.toUpperCase()})
+            </button>
+            <button
+              type="button"
+              className={`review-lang-btn ${useEnglish ? 'active' : ''}`}
+              onClick={() => {
+                setUseEnglish(true)
+                setDraft(englishFormData ? { ...englishFormData } : { ...formData })
+                setValidated(false)
+                setConfirmed(false)
+                replacePreview('')
+              }}
+            >
+              📋 Official Admin / Collector (English)
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="review-body">

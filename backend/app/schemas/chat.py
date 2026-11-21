@@ -105,6 +105,7 @@ class ChatRequest(BaseModel):
         max_length=settings.max_history_messages,
     )
     form_data: FormData = Field(default_factory=FormData)
+    english_form_data: Optional[FormData] = Field(default=None)
     language: str = Field(default="en", max_length=10)
 
     @field_validator("message", mode="before")
@@ -127,6 +128,7 @@ class ChatResponse(BaseModel):
 
     reply: str
     extracted_data: FormData
+    english_data: Optional[FormData] = Field(default=None)
     updated_fields: list[str]
     validation_errors: dict[str, str] = Field(default_factory=dict)
     missing_fields: list[str]
@@ -224,6 +226,7 @@ class GeminiTurnOutput(BaseModel):
 
     reply: str
     extracted_data: GeminiExtraction
+    english_data: Optional[GeminiExtraction] = None
     next_question: Optional[str] = None
     conversation_complete: bool
     detected_language: str

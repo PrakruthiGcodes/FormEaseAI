@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import useSpeechRecognition from '../hooks/useSpeechRecognition.js'
 import { VOICE_LANGUAGES, hasVoiceSupport } from '../utils/speech.js'
+import { INPUT_PLACEHOLDERS } from '../utils/languages.js'
 
 // Message box with voice input, Send, and an editable transcript.
 // Speech is turned into text in the box. The user can edit it before pressing Send.
@@ -104,7 +105,7 @@ export default function ChatInput({ onSend, disabled, languageCode }) {
           className="chat-textarea"
           rows={1}
           placeholder={
-            speech.listening ? 'Speak now…' : 'Type or speak your answer…'
+            speech.listening ? 'Speak now…' : (INPUT_PLACEHOLDERS[languageCode] || 'Type or speak your answer…')
           }
           aria-label="Message"
           maxLength={1000}

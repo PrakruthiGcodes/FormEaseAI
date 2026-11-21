@@ -4,9 +4,15 @@
 
 export const VOICE_LANGUAGES = {
   en: { tag: 'en-IN', label: 'English' },
-  hi: { tag: 'hi-IN', label: 'Hindi' },
-  kn: { tag: 'kn-IN', label: 'Kannada' },
-  te: { tag: 'te-IN', label: 'Telugu' },
+  hi: { tag: 'hi-IN', label: 'Hindi (हिन्दी)' },
+  kn: { tag: 'kn-IN', label: 'Kannada (ಕನ್ನಡ)' },
+  te: { tag: 'te-IN', label: 'Telugu (తెలుగు)' },
+  mr: { tag: 'mr-IN', label: 'Marathi (मराठी)' },
+  ta: { tag: 'ta-IN', label: 'Tamil (தமிழ்)' },
+  ml: { tag: 'ml-IN', label: 'Malayalam (മലയാളം)' },
+  bn: { tag: 'bn-IN', label: 'Bengali (বাংলা)' },
+  gu: { tag: 'gu-IN', label: 'Gujarati (ગુજરાતી)' },
+  pa: { tag: 'pa-IN', label: 'Punjabi (ਪੰਜਾਬੀ)' },
 }
 
 export function hasVoiceSupport(languageCode) {
