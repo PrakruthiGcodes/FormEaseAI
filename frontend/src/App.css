@@ -4,10 +4,11 @@
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  border-inline: 1px solid var(--border);
+  height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border-inline: none;
 }
 
 .app-main {
@@ -215,11 +216,13 @@
 }
 
 .message {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 14px;
+  max-width: 82%;
+  padding: 12px 18px;
+  border-radius: 16px;
   word-wrap: break-word;
   overflow-wrap: anywhere;
+  font-size: 17px;
+  line-height: 1.6;
 }
 
 .message-text {
@@ -403,12 +406,12 @@
 
 @media (min-width: 760px) {
   .form-summary {
-    width: 290px;
+    flex: 0 0 380px;
+    width: 380px;
     height: auto;
     max-height: none;
     min-height: 0;
     align-self: stretch; /* same height as the chat column */
-    flex-shrink: 0;
   }
 }
 
@@ -508,21 +511,25 @@
 .field-item {
   display: flex;
   flex-direction: column;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: var(--bg);
   border: 1px solid var(--border);
   transition: background 0.4s ease;
 }
 
 .field-label {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: -0.1px;
 }
 
 .field-value {
-  font-size: 15px;
-  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  color: #0f172a;
+  margin-top: 3px;
   overflow-wrap: anywhere;
 }
 
@@ -1135,4 +1142,77 @@
   background: var(--purple, #4f46e5);
   color: #ffffff;
   border-color: var(--purple, #4f46e5);
+}
+
+/* ---------- Accessibility & Elderly Mode (High Readability) ---------- */
+.large-text-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #cbd5e1);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.large-text-btn:hover {
+  border-color: var(--purple, #4f46e5);
+}
+
+.large-text-btn.active {
+  background: var(--purple, #4f46e5);
+  color: #ffffff;
+  border-color: var(--purple, #4f46e5);
+}
+
+.large-text-badge {
+  font-weight: 800;
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--purple, #4f46e5);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.large-text-btn.active .large-text-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Scaled up font sizes when Elderly / Large Text mode is active */
+.large-text-mode {
+  font-size: 19px;
+}
+
+.large-text-mode .message {
+  font-size: 20px;
+  line-height: 1.7;
+  padding: 16px 22px;
+}
+
+.large-text-mode .field-label {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.large-text-mode .field-value {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.large-text-mode .chat-textarea {
+  font-size: 19px;
+}
+
+.large-text-mode .summary-title {
+  font-size: 24px;
+}
+
+.large-text-mode .next-question p {
+  font-size: 18px;
 }

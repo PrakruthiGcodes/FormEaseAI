@@ -98,6 +98,20 @@ export const INITIAL_GREETINGS = {
   pa: 'ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਫਾਰਮਈਜ਼ ਏਆਈ ਹਾਂ। ਫਾਰਮ ਆਸਾਨੀ ਨਾਲ ਭਰਨ ਵਿੱਚ ਮੈਂ ਤੁਹਾਡੀ ਮਦਦ ਕਰਾਂਗਾ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ, ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਪੂਰਾ ਨਾਮ ਦੱਸੋ।',
 }
 
+// Localized empty field indicators for Citizen View in each language
+export const FIELD_EMPTY_PLACEHOLDERS = {
+  en: 'Not yet provided',
+  kn: 'ಇನ್ನೂ ಒದಗಿಸಲಾಗಿಲ್ಲ',
+  mr: 'अद्याप दिलेले नाही',
+  hi: 'अभी तक नहीं दिया गया',
+  te: 'ఇంಕಾ నమోదు చేయలేదు',
+  ta: 'இன்னும் பதிவு செய்யப்படவில்லை',
+  ml: 'ഇതുവരെ നൽകിയിട്ടില്ല',
+  bn: 'এখনও দেওয়া হয়নি',
+  gu: 'હજુ સુધી નોંધાયેલ નથી',
+  pa: 'ਅਜੇ ਤੱਕ ਦਰਜ ਨਹੀਂ ਕੀਤਾ ਗਿਆ',
+}
+
 // Localized input placeholders
 export const INPUT_PLACEHOLDERS = {
   en: 'Type or speak your answer…',

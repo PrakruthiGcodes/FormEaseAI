@@ -4,6 +4,7 @@
   POST /api/pdf            build the PDF (inline for preview, or as a download)
 """
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -20,6 +21,7 @@ from app.schemas.chat import (
 from app.services.pdf_service import build_form_pdf
 from app.services.validation import validate_form
 
+logger = logging.getLogger("formease.form")
 router = APIRouter(tags=["form"])
 
 
@@ -38,6 +40,7 @@ def validate(request: FormValidateRequest) -> FormValidateResponse:
     normalised, errors = validate_form(request.form_data.model_dump())
     missing = _check_required(normalised, errors)
     completed = [field for field in FORM_FIELDS if normalised.get(field)]
+    logger.info("Form validation: complete=%s error_count=%d", not missing and not errors, len(errors))
     return FormValidateResponse(
         form_data=FormData(**normalised),
         validation_errors=errors,
@@ -70,6 +73,7 @@ def generate_pdf(
 
     pdf_bytes = build_form_pdf(normalised, language_name=SUPPORTED_LANGUAGES[request.language])
     filename = "formease_form.pdf"
+    logger.info("PDF generated: language=%s disposition=%s size_bytes=%d", request.language, disposition, len(pdf_bytes))
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

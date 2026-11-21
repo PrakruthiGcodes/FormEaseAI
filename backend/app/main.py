@@ -15,7 +15,13 @@ from app.api.routes import chat, form, forms, gemini, health
 from app.core.config import settings
 from app.core.crypto import DecryptionFailed, EncryptionUnavailable
 from app.core.database import STOPPED_MESSAGE, DatabaseUnavailable, safe_error_summary
-from app.services.form_store import FormNotFound, FormValidationFailed
+from app.services.form_store import (
+    BruteForceLocked,
+    FormAccessDenied,
+    FormNotFound,
+    FormValidationFailed,
+    InvalidUnlockCredentials,
+)
 
 # Log INFO and above. No module logs API keys, form values, or messages.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,8 +36,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "X-Session-Token", "X-Access-Pin"],
 )
 
 
@@ -70,6 +76,21 @@ async def _decryption_failed(_: Request, exc: DecryptionFailed) -> JSONResponse:
 @app.exception_handler(FormNotFound)
 async def _form_not_found(_: Request, exc: FormNotFound) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": "Form not found."})
+
+
+@app.exception_handler(FormAccessDenied)
+async def _form_access_denied(_: Request, exc: FormAccessDenied) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc) or "Access denied."})
+
+
+@app.exception_handler(InvalidUnlockCredentials)
+async def _invalid_unlock_credentials(_: Request, exc: InvalidUnlockCredentials) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc) or "Invalid reference code or PIN"})
+
+
+@app.exception_handler(BruteForceLocked)
+async def _brute_force_locked(_: Request, exc: BruteForceLocked) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": str(exc)})
 
 
 @app.exception_handler(FormValidationFailed)

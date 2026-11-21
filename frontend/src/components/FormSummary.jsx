@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FORM_FIELDS, FIELD_LABELS_BY_LANG, LANGUAGES } from '../utils/languages.js'
+import { FORM_FIELDS, FIELD_LABELS_BY_LANG, FIELD_EMPTY_PLACEHOLDERS, LANGUAGES } from '../utils/languages.js'
 
 // Side panel: progress, extracted details (editable), missing fields, and actions.
 // Props:
@@ -187,7 +187,7 @@ export default function FormSummary({
                     Edit
                   </button>
                 </div>
-                <span className="field-value">{value || (adminMode ? 'Not yet provided' : 'अद्याप दिलेले नाही / Not provided')}</span>
+                <span className="field-value">{value || (adminMode ? 'Not yet provided' : (FIELD_EMPTY_PLACEHOLDERS[language] || 'Not yet provided'))}</span>
                 {error && <span className="field-error">{error}</span>}
               </li>
             )

@@ -158,6 +158,25 @@ class FormValidateResponse(BaseModel):
 MAX_SAVED_MESSAGES = 200
 
 
+class CreateFormRequest(BaseModel):
+    language: str = Field(default="en", max_length=10)
+    access_pin: Optional[str] = Field(default=None, pattern=r"^\d{4}$")
+
+
+class CreateFormResponse(BaseModel):
+    id: str
+    status: str
+    language: str
+    created_at: str
+    reference_code: str
+    access_pin_issued: str
+
+
+class UnlockFormRequest(BaseModel):
+    reference_code: str = Field(..., min_length=1, max_length=30)
+    access_pin: str = Field(..., min_length=1, max_length=20)
+
+
 class FormSaveRequest(BaseModel):
     """Body of PUT /api/forms/{id}: the whole saved state of one form."""
 
@@ -184,6 +203,7 @@ class FormSummaryItem(BaseModel):
     total_fields: int
     created_at: str
     updated_at: str
+    reference_code: Optional[str] = None
 
 
 class FormDetail(BaseModel):
@@ -199,6 +219,7 @@ class FormDetail(BaseModel):
     total_fields: int
     created_at: str
     updated_at: str
+    reference_code: Optional[str] = None
 
 
 # ----- Gemini output (plain types for the structured-output schema) -----

@@ -104,6 +104,7 @@ function App() {
   const [view, setView] = useState('chat') // 'chat' | 'review' | 'saved'
   const [speakReplies, setSpeakRepliesState] = useState(getSpeakReplies)
   const [adminMode, setAdminMode] = useState(false)
+  const [largeText, setLargeText] = useState(false)
 
   const { messages, formData, englishFormData, language, nextQuestion, conversationComplete, updatedFields, status, formId } =
     session
@@ -338,7 +339,7 @@ function App() {
   const voiceLanguage = hasVoiceSupport(language) ? VOICE_LANGUAGES[language].label : null
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${largeText ? 'large-text-mode' : ''}`}>
       <Header
         language={language}
         onLanguageChange={setLanguage}
@@ -347,6 +348,8 @@ function App() {
         speakReplies={speakReplies}
         onToggleSpeak={toggleSpeak}
         speechOutputSupported={speech.supported}
+        largeText={largeText}
+        onToggleLargeText={() => setLargeText((v) => !v)}
       />
 
       {view === 'review' ? (

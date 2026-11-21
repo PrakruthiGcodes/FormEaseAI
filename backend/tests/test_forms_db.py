@@ -28,7 +28,8 @@ pytestmark = pytest.mark.skipif(
     reason="MongoDB not running or FORM_ENCRYPTION_KEY not set",
 )
 
-client = TestClient(app)
+SESSION_TOKEN = "test-session-token"
+client = TestClient(app, headers={"X-Session-Token": SESSION_TOKEN})
 
 COMPLETE = {
     "full_name": "Ananya Rao",

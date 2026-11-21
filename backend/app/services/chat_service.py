@@ -8,6 +8,8 @@ Flow for one user message:
   4. Return the reply plus the updated, validated form state.
 """
 
+import logging
+
 from app.core.config import settings
 from app.schemas.chat import (
     FORM_FIELDS,
@@ -19,6 +21,8 @@ from app.schemas.chat import (
 )
 from app.services import gemini_service
 from app.services.validation import validate_field
+
+logger = logging.getLogger("formease.chat")
 
 
 def merge_form_data(current: FormData, extracted: GeminiExtraction) -> tuple[FormData, list[str], dict]:
@@ -79,6 +83,14 @@ def process_chat(request: ChatRequest) -> ChatResponse:
     is_complete = not missing
 
     detected = output.detected_language if output.detected_language in SUPPORTED_LANGUAGES else request.language
+
+    logger.info(
+        "Chat turn processed: language=%s detected=%s updated_fields=%d complete=%s",
+        request.language,
+        detected,
+        len(updated),
+        is_complete,
+    )
 
     return ChatResponse(
         reply=output.reply,

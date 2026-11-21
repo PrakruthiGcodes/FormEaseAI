@@ -2,7 +2,7 @@ import Logo from './Logo.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { LANGUAGES } from '../utils/languages.js'
 
-// Top bar: logo, language selector, read-aloud toggle, and backend status.
+// Top bar: logo, language selector, read-aloud toggle, text zoom, and backend status.
 export default function Header({
   language,
   onLanguageChange,
@@ -11,6 +11,8 @@ export default function Header({
   speakReplies,
   onToggleSpeak,
   speechOutputSupported,
+  largeText,
+  onToggleLargeText,
 }) {
   return (
     <header className="app-header">
@@ -26,6 +28,17 @@ export default function Header({
             ))}
           </select>
         </label>
+
+        <button
+          type="button"
+          className={`large-text-btn ${largeText ? 'active' : ''}`}
+          onClick={onToggleLargeText}
+          title="Toggle larger, clearer text for elderly users"
+          aria-pressed={largeText}
+        >
+          <span className="large-text-badge">A+</span>
+          <span>{largeText ? 'Normal text' : 'Large text'}</span>
+        </button>
 
         <label className={`speak-toggle ${speechOutputSupported ? '' : 'speak-toggle-disabled'}`}>
           <input
