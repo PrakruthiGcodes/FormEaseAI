@@ -7,7 +7,9 @@ import ModeIndicator from './components/ModeIndicator.jsx'
 import FormSummary from './components/FormSummary.jsx'
 import ReviewScreen from './components/ReviewScreen.jsx'
 import SavedFormsPanel from './components/SavedFormsPanel.jsx'
+import GuidedVoiceView from './components/GuidedVoiceView.jsx'
 import useSpeechSynthesis from './hooks/useSpeechSynthesis.js'
+import useSpeechRecognition from './hooks/useSpeechRecognition.js'
 import {
   createSavedForm,
   fetchDatabaseStatus,
@@ -19,7 +21,15 @@ import {
   sendChatMessage,
   validateForm,
 } from './services/api.js'
-import { DEFAULT_FORM_TYPES, FORM_FIELDS, INITIAL_GREETINGS } from './utils/languages.js'
+import {
+  DEFAULT_FORM_TYPES,
+  DOMAIN_EXTRA_FIELDS,
+  FIELD_LABELS_BY_LANG,
+  FORM_FIELDS,
+  INITIAL_GREETINGS,
+  detectVoiceCommand,
+} from './utils/languages.js'
+import { playSaved } from './utils/earcons.js'
 import { VOICE_LANGUAGES, hasVoiceSupport } from './utils/speech.js'
 import { clearSavedSession, loadSavedSession, saveSession } from './utils/sessionStorage.js'
 import { getSpeakReplies, setSpeakReplies } from './utils/storage.js'
@@ -123,6 +133,13 @@ function App() {
   const [largeText, setLargeText] = useState(false)
   const [formTypes, setFormTypes] = useState(DEFAULT_FORM_TYPES)
 
+  // Accessibility States
+  const [highContrast, setHighContrast] = useState(false)
+  const [slowVoice, setSlowVoice] = useState(false)
+  const [handsFreeMode, setHandsFreeMode] = useState(false)
+  const [guidedMode, setGuidedMode] = useState(false)
+  const [announcement, setAnnouncement] = useState('')
+
   // Security, Privacy & Kiosk Isolation State
   const [privacyMask, setPrivacyMask] = useState(true)
   const [isScreenLocked, setIsScreenLocked] = useState(false)
@@ -154,6 +171,252 @@ function App() {
 
   const speech = useSpeechSynthesis()
 
+  // Calculate current missing field for Guided Voice View
+  const domainDefs = DOMAIN_EXTRA_FIELDS[formType] || []
+  const coreMissingField = FORM_FIELDS.find((f) => !formData[f.key])
+  const domainMissingField = domainDefs.find((df) => !extraFields[df.key])
+  const activeMissingFieldKey = coreMissingField ? coreMissingField.key : domainMissingField ? domainMissingField.key : null
+
+  const activeFieldLabel = activeMissingFieldKey
+    ? (FIELD_LABELS_BY_LANG[language]?.[activeMissingFieldKey] ||
+        coreMissingField?.label ||
+        domainMissingField?.label ||
+        activeMissingFieldKey)
+    : ''
+
+  const completedCoreCount = FORM_FIELDS.filter((f) => formData[f.key]).length
+  const completedDomainCount = domainDefs.filter((df) => extraFields[df.key]).length
+  const completedTotal = completedCoreCount + completedDomainCount
+  const totalFieldsCount = FORM_FIELDS.length + domainDefs.length
+  const stepNumber = Math.min(completedTotal + 1, totalFieldsCount)
+
+  const activeQuestionText = nextQuestion || (messages.length > 0 ? messages[messages.length - 1].text : INITIAL_GREETINGS[language])
+
+  // Creates a database record on first use
+  const ensureFormId = useCallback(async (pin = activePin) => {
+    if (formId || !database.available) return formId
+    try {
+      const created = await createSavedForm(language, pin, formType)
+      const issuedPin = created.access_pin_issued || pin
+      if (issuedPin) {
+        setActivePin(issuedPin)
+      }
+      setSession((prev) => ({
+        ...prev,
+        formId: created.id,
+        referenceCode: created.reference_code,
+      }))
+      return created.id
+    } catch (err) {
+      setSaveState({ state: 'error', message: err.message })
+      return null
+    }
+  }, [formId, database.available, language, activePin, formType])
+
+  // Send a message to POST /api/chat
+  const handleSend = useCallback(async (text) => {
+    setIsSending(true)
+    const userMessage = { id: session.nextId, role: 'user', text }
+    setSession((prev) => ({
+      ...prev,
+      messages: [...prev.messages, userMessage],
+      nextId: prev.nextId + 1,
+    }))
+
+    try {
+      await ensureFormId()
+      const data = await sendChatMessage({
+        message: text,
+        history: toHistory(session.messages).slice(-MAX_HISTORY_MESSAGES),
+        form_data: session.formData,
+        english_form_data: session.englishFormData,
+        language: session.language,
+        form_type: session.formType || 'general',
+        extra_fields: session.extraFields || {},
+        english_extra_fields: session.englishExtraFields || {},
+      })
+
+      playSaved()
+      setAnnouncement(`Answer recorded: ${data.reply}`)
+
+      setSession((prev) => ({
+        ...prev,
+        messages: [...prev.messages, { id: prev.nextId, role: 'assistant', text: data.reply }],
+        formData: data.extracted_data,
+        englishFormData: data.english_data || prev.englishFormData || data.extracted_data,
+        extraFields: data.extra_fields || prev.extraFields || {},
+        englishExtraFields: data.english_extra_fields || prev.englishExtraFields || data.extra_fields || {},
+        nextQuestion: data.next_question,
+        conversationComplete: data.conversation_complete,
+        updatedFields: data.updated_fields || [],
+        validationErrors: data.validation_errors || {},
+        status: 'in_progress',
+        nextId: prev.nextId + 1,
+      }))
+
+      // Speak reply aloud with optional hands-free next listen
+      if (speakReplies || handsFreeMode) {
+        speech.speak(data.reply, session.language, {
+          rate: slowVoice ? 0.75 : 1.0,
+          onEnd: () => {
+            if (handsFreeMode && view !== 'review' && !data.conversation_complete) {
+              setTimeout(() => {
+                startMicRef.current?.()
+              }, 350)
+            }
+          },
+        })
+      }
+    } catch (err) {
+      setAnnouncement(`Error: ${err.message}`)
+      setSession((prev) => ({
+        ...prev,
+        messages: [...prev.messages, { id: prev.nextId, role: 'assistant', text: err.message, isError: true }],
+        nextId: prev.nextId + 1,
+      }))
+    } finally {
+      setIsSending(false)
+    }
+  }, [ensureFormId, session, speakReplies, handsFreeMode, slowVoice, view, speech])
+
+  const handleSpeechCapturedRef = useRef(null)
+
+  const recognition = useSpeechRecognition({
+    languageCode: session.language,
+    onFinish: (spoken) => handleSpeechCapturedRef.current?.(spoken),
+  })
+
+  const { start: startMic, stop: stopMic, listening: isListening, interim: interimTranscript } = recognition
+
+  // Repeat current question aloud
+  const handleRepeatQuestion = useCallback(() => {
+    if (speech.speaking) speech.stop()
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    const textToSpeak = lastAssistant?.text || INITIAL_GREETINGS[session.language] || INITIAL_GREETINGS.en
+    setAnnouncement(`Repeating: ${textToSpeak}`)
+    speech.speak(textToSpeak, session.language, {
+      rate: slowVoice ? 0.75 : 1.0,
+      onEnd: () => {
+        if (handsFreeMode && view !== 'review') {
+          setTimeout(() => {
+            startMic()
+          }, 350)
+        }
+      },
+    })
+  }, [messages, session.language, slowVoice, handsFreeMode, view, speech, startMic])
+
+  // Read summary of filled fields aloud
+  const handleReadSummaryAloud = useCallback(() => {
+    if (speech.speaking) speech.stop()
+    const lines = []
+    const langLabels = FIELD_LABELS_BY_LANG[session.language] || FIELD_LABELS_BY_LANG.en
+    lines.push('Reading your recorded application details.')
+
+    FORM_FIELDS.forEach((f) => {
+      const val = formData[f.key]
+      if (val) lines.push(`${langLabels[f.key] || f.label}: ${val}`)
+    })
+
+    const extraDefs = DOMAIN_EXTRA_FIELDS[formType] || []
+    extraDefs.forEach((df) => {
+      const val = extraFields[df.key]
+      if (val) lines.push(`${df.label}: ${val}`)
+    })
+
+    if (lines.length <= 1) {
+      lines.push('No answers have been recorded yet.')
+    }
+
+    setAnnouncement('Reading summary aloud')
+    speech.speakSequence(lines, session.language, {
+      rate: slowVoice ? 0.75 : 1.0,
+      onComplete: () => {
+        if (handsFreeMode && view !== 'review') {
+          setTimeout(() => {
+            startMic()
+          }, 400)
+        }
+      },
+    })
+  }, [formData, extraFields, formType, session.language, slowVoice, handsFreeMode, view, speech, startMic])
+
+  // Speech Recognition hook and voice command intercept
+  const handleSpeechCaptured = useCallback((spoken) => {
+    const trimmed = spoken.trim()
+    if (!trimmed) return
+
+    // Voice navigation commands intercept
+    const cmd = detectVoiceCommand(trimmed)
+    if (cmd === 'repeat') {
+      handleRepeatQuestion()
+      return
+    }
+    if (cmd === 'summary') {
+      handleReadSummaryAloud()
+      return
+    }
+
+    handleSend(trimmed)
+  }, [handleRepeatQuestion, handleReadSummaryAloud, handleSend])
+
+  useEffect(() => {
+    handleSpeechCapturedRef.current = handleSpeechCaptured
+  }, [handleSpeechCaptured])
+
+  // One-click Start Easy Voice Guide on Welcome Hero
+  function handleStartEasyVoiceGuide() {
+    setGuidedMode(true)
+    setHandsFreeMode(true)
+    setSpeakRepliesState(true)
+    setSpeakReplies(true)
+    setAnnouncement('Easy Voice Guide enabled. Reading welcome question.')
+
+    const welcomeMsg = messages.length > 0 ? messages[0].text : (INITIAL_GREETINGS[session.language] || INITIAL_GREETINGS.en)
+    speech.speak(welcomeMsg, session.language, {
+      rate: slowVoice ? 0.75 : 1.0,
+      onEnd: () => {
+        setTimeout(() => {
+          startMic()
+        }, 350)
+      },
+    })
+  }
+
+  // Keyboard Shortcuts for hands-free and accessibility
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        return
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (isListening) {
+          stopMic()
+          setAnnouncement('Microphone stopped')
+        } else {
+          setAnnouncement('Microphone listening')
+          startMic()
+        }
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        handleRepeatQuestion()
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        handleReadSummaryAloud()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        speech.stop()
+        if (isListening) stopMic()
+        setAnnouncement('Speech and microphone stopped')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isListening, startMic, stopMic, handleRepeatQuestion, handleReadSummaryAloud, speech])
+
   // Keep chat and form state synced with sessionStorage
   useEffect(() => {
     saveSession(session)
@@ -166,6 +429,7 @@ function App() {
       if (!isScreenLocked) {
         inactivityTimerRef.current = setTimeout(() => {
           setIsScreenLocked(true)
+          setAnnouncement('Screen locked for privacy')
         }, INACTIVITY_TIMEOUT_MS)
       }
     }
@@ -198,9 +462,7 @@ function App() {
           setFormTypes(types)
         }
       })
-      .catch(() => {
-        // Fallback to DEFAULT_FORM_TYPES already set
-      })
+      .catch(() => {})
 
     async function loadDatabase() {
       let dbStatus = { available: false, message: 'MongoDB status unknown.' }
@@ -256,27 +518,6 @@ function App() {
     return () => clearTimeout(timer)
   }, [messages, formData, language, status, formId, formType, extraFields, englishExtraFields, database.available, activePin])
 
-  // Creates a database record on first use
-  const ensureFormId = useCallback(async (pin = activePin) => {
-    if (formId || !database.available) return formId
-    try {
-      const created = await createSavedForm(language, pin, formType)
-      const issuedPin = created.access_pin_issued || pin
-      if (issuedPin) {
-        setActivePin(issuedPin)
-      }
-      setSession((prev) => ({
-        ...prev,
-        formId: created.id,
-        referenceCode: created.reference_code,
-      }))
-      return created.id
-    } catch (err) {
-      setSaveState({ state: 'error', message: err.message })
-      return null
-    }
-  }, [formId, database.available, language, activePin, formType])
-
   function setLanguage(code) {
     setSession((prev) => {
       let updatedMessages = prev.messages
@@ -317,60 +558,12 @@ function App() {
     }))
   }
 
-  // Send a message to POST /api/chat
-  async function handleSend(text) {
-    setIsSending(true)
-    const userMessage = { id: session.nextId, role: 'user', text }
-    setSession((prev) => ({
-      ...prev,
-      messages: [...prev.messages, userMessage],
-      nextId: prev.nextId + 1,
-    }))
-
-    try {
-      await ensureFormId()
-      const data = await sendChatMessage({
-        message: text,
-        history: toHistory(session.messages).slice(-MAX_HISTORY_MESSAGES),
-        form_data: session.formData,
-        english_form_data: session.englishFormData,
-        language: session.language,
-        form_type: session.formType || 'general',
-        extra_fields: session.extraFields || {},
-        english_extra_fields: session.englishExtraFields || {},
-      })
-
-      setSession((prev) => ({
-        ...prev,
-        messages: [...prev.messages, { id: prev.nextId, role: 'assistant', text: data.reply }],
-        formData: data.extracted_data,
-        englishFormData: data.english_data || prev.englishFormData || data.extracted_data,
-        extraFields: data.extra_fields || prev.extraFields || {},
-        englishExtraFields: data.english_extra_fields || prev.englishExtraFields || data.extra_fields || {},
-        nextQuestion: data.next_question,
-        conversationComplete: data.conversation_complete,
-        updatedFields: data.updated_fields || [],
-        validationErrors: data.validation_errors || {},
-        status: 'in_progress',
-        nextId: prev.nextId + 1,
-      }))
-      if (speakReplies) speech.speak(data.reply, session.language)
-    } catch (err) {
-      setSession((prev) => ({
-        ...prev,
-        messages: [...prev.messages, { id: prev.nextId, role: 'assistant', text: err.message, isError: true }],
-        nextId: prev.nextId + 1,
-      }))
-    } finally {
-      setIsSending(false)
-    }
-  }
-
   // Edit core field value from summary panel
   async function handleEditField(field, value) {
     try {
       const result = await validateForm({ ...formData, [field]: value })
       if (result.validation_errors[field]) return result.validation_errors[field]
+      playSaved()
       setSession((prev) => ({
         ...prev,
         formData: result.form_data,
@@ -387,6 +580,7 @@ function App() {
 
   // Edit domain extra field value from summary panel
   async function handleEditExtraField(key, value) {
+    playSaved()
     setSession((prev) => ({
       ...prev,
       extraFields: { ...prev.extraFields, [key]: value },
@@ -420,6 +614,7 @@ function App() {
         },
         activePin
       )
+      playSaved()
       setSaveState({ state: 'saved', message: '' })
     }
   }
@@ -473,7 +668,9 @@ function App() {
     setView('chat')
 
     if (speakReplies && speech.supported) {
-      speech.speak('Your session has been securely erased from this kiosk.', language)
+      speech.speak('Your session has been securely erased from this kiosk.', language, {
+        rate: slowVoice ? 0.75 : 1.0,
+      })
     }
   }
 
@@ -522,6 +719,7 @@ function App() {
           formId: created.id,
         })
       }
+      playSaved()
       setSaveState({ state: 'saved', message: '' })
     } catch (err) {
       setPinModalError(err.message || 'Failed to save form with PIN.')
@@ -535,24 +733,33 @@ function App() {
     setPinInput(randomPin)
   }
 
-  // Unlock from Lock Curtain
-  function handleUnlockScreen(e) {
+  // Zero-friction unlock from Lock Curtain
+  function handleFrictionlessResume() {
+    setIsScreenLocked(false)
+    setLockUnlockPin('')
+    setLockError('')
+    playSaved()
+    setAnnouncement('Session resumed successfully')
+  }
+
+  function handleUnlockScreenWithPin(e) {
     e.preventDefault()
     setLockError('')
     const pin = lockUnlockPin.trim()
 
-    // If an activePin was set, require matching it
     if (activePin) {
       if (pin === activePin) {
         setIsScreenLocked(false)
         setLockUnlockPin('')
+        playSaved()
+        setAnnouncement('Session unlocked with PIN')
       } else {
         setLockError('Incorrect PIN. Please re-enter.')
       }
     } else {
-      // If no PIN was explicitly set yet, unlock directly
       setIsScreenLocked(false)
       setLockUnlockPin('')
+      playSaved()
     }
   }
 
@@ -579,7 +786,12 @@ function App() {
   const voiceLanguage = hasVoiceSupport(language) ? VOICE_LANGUAGES[language].label : null
 
   return (
-    <div className={`app-shell ${largeText ? 'large-text-mode' : ''}`}>
+    <div className={`app-shell ${largeText ? 'large-text-mode' : ''} ${highContrast ? 'high-contrast' : ''}`}>
+      {/* Screen reader live assertive status announcer */}
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {announcement}
+      </div>
+
       <Header
         language={language}
         onLanguageChange={setLanguage}
@@ -595,6 +807,14 @@ function App() {
         onLockScreen={() => setIsScreenLocked(true)}
         onFinishAndErase={handleFinishAndErase}
         activePin={activePin}
+        highContrast={highContrast}
+        onToggleHighContrast={() => setHighContrast((v) => !v)}
+        slowVoice={slowVoice}
+        onToggleSlowVoice={() => setSlowVoice((v) => !v)}
+        handsFreeMode={handsFreeMode}
+        onToggleHandsFree={() => setHandsFreeMode((v) => !v)}
+        guidedMode={guidedMode}
+        onToggleGuidedMode={() => setGuidedMode((v) => !v)}
       />
 
       {view === 'review' ? (
@@ -611,6 +831,7 @@ function App() {
             formId={formId}
             privacyMask={privacyMask}
             onFinishAndErase={handleFinishAndErase}
+            slowVoice={slowVoice}
           />
         </main>
       ) : (
@@ -623,6 +844,29 @@ function App() {
                   onNew={startNewForm}
                   onClose={() => setView('chat')}
                 />
+              ) : guidedMode ? (
+                /* One-Question Guided Voice View for Rural & Elderly */
+                <GuidedVoiceView
+                  currentQuestion={activeQuestionText}
+                  currentFieldKey={activeMissingFieldKey}
+                  fieldLabel={activeFieldLabel}
+                  stepNumber={stepNumber}
+                  totalSteps={totalFieldsCount}
+                  language={language}
+                  isListening={isListening}
+                  interimTranscript={interimTranscript}
+                  onToggleMic={() => {
+                    if (isListening) stopMic()
+                    else startMic()
+                  }}
+                  onRepeatQuestion={handleRepeatQuestion}
+                  onSendText={handleSend}
+                  isSending={isSending}
+                  fieldError={activeMissingFieldKey ? session.validationErrors[activeMissingFieldKey] || '' : ''}
+                  handsFreeMode={handsFreeMode}
+                  conversationComplete={conversationComplete}
+                  onReview={() => setView('review')}
+                />
               ) : (
                 <>
                   {messages.length === 0 || (messages.length === 1 && messages[0].role === 'assistant') ? (
@@ -630,6 +874,9 @@ function App() {
                       selectedFormType={formType}
                       onSelectFormType={handleSelectFormType}
                       formTypes={formTypes}
+                      onStartEasyVoiceGuide={handleStartEasyVoiceGuide}
+                      handsFreeMode={handsFreeMode}
+                      onToggleHandsFree={(val) => setHandsFreeMode(val)}
                     />
                   ) : null}
                   <ChatWindow messages={messages} isSending={isSending} />
@@ -676,27 +923,40 @@ function App() {
         </main>
       )}
 
-      {view !== 'review' && (
+      {view !== 'review' && !guidedMode && (
         <footer className="app-footer">
           <ModeIndicator speechInputSupported={speech.supported} voiceLanguage={voiceLanguage} />
           <ChatInput onSend={handleSend} disabled={isSending} languageCode={language} />
         </footer>
       )}
 
-      {/* Lock Screen Curtain Overlay */}
+      {/* Lock Screen Curtain Overlay - Frictionless for Blind / Elderly / Illiterate citizens */}
       {isScreenLocked && (
         <div className="modal-backdrop lock-curtain-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="lock-title">
           <div className="modal-dialog lock-curtain-dialog">
             <div className="lock-icon" aria-hidden="true">🔒</div>
             <h2 id="lock-title">Kiosk Privacy Lock</h2>
             <p className="lock-curtain-desc">
-              This session was locked to protect your personal details on this public kiosk.
+              This screen was locked after a period of inactivity to protect your personal details on this public kiosk.
             </p>
 
-            <form onSubmit={handleUnlockScreen} className="lock-unlock-form">
-              {activePin ? (
+            {/* Frictionless 1-Tap Resume Button for Blind & Illiterate Citizens */}
+            <div className="lock-frictionless-resume">
+              <button
+                type="button"
+                className="lock-resume-btn primary-action"
+                onClick={handleFrictionlessResume}
+                autoFocus
+              >
+                <span>🟢 Tap to Resume My Form</span>
+              </button>
+            </div>
+
+            {/* Optional PIN Unlock if citizen set a 4-digit PIN */}
+            {activePin && (
+              <form onSubmit={handleUnlockScreenWithPin} className="lock-unlock-form">
                 <label className="lock-input-label">
-                  <span>Enter 4-Digit Session PIN</span>
+                  <span>Or enter your 4-digit PIN:</span>
                   <input
                     type="password"
                     inputMode="numeric"
@@ -705,33 +965,25 @@ function App() {
                     maxLength={4}
                     value={lockUnlockPin}
                     onChange={(e) => setLockUnlockPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    autoFocus
-                    required
                   />
                 </label>
-              ) : (
-                <p className="lock-notice">
-                  No PIN was set for this session. For citizen privacy on this shared kiosk, unattended sessions cannot be resumed without credentials.
-                </p>
-              )}
-
-              {lockError && <p className="lock-error-text" role="alert">{lockError}</p>}
-
-              <div className="lock-buttons">
-                {activePin && (
-                  <button type="submit" className="small-button primary lock-continue-btn">
-                    Unlock Session
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="danger-button lock-wipe-btn"
-                  onClick={handleFinishAndErase}
-                >
-                  Wipe & Start New Session
+                {lockError && <p className="lock-error-text" role="alert">{lockError}</p>}
+                <button type="submit" className="small-button secondary-btn">
+                  Unlock with PIN
                 </button>
-              </div>
-            </form>
+              </form>
+            )}
+
+            <div className="lock-footer-actions">
+              <button
+                type="button"
+                className="danger-button lock-wipe-btn"
+                onClick={handleFinishAndErase}
+                title="Wipe current form and reset kiosk for the next citizen"
+              >
+                🗑️ Finish & Erase My Data
+              </button>
+            </div>
           </div>
         </div>
       )}

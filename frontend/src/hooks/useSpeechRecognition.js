@@ -5,6 +5,7 @@ import {
   getSpeechRecognitionClass,
   hasVoiceSupport,
 } from '../utils/speech.js'
+import { playListenStart, playSpeechCaptured, playError } from '../utils/earcons.js'
 
 // Speech-to-text using the browser's Web Speech API.
 // Returns the state for the microphone button.
@@ -75,6 +76,7 @@ export default function useSpeechRecognition({ languageCode, onFinish }) {
       recognition.onerror = (event) => {
         // 'aborted' happens when we stop on purpose; it is not an error to show.
         if (event.error === 'aborted') return
+        playError()
         setError(SPEECH_ERROR_MESSAGES[event.error] || `Speech input failed (${event.error}). Try again.`)
       }
 
@@ -84,15 +86,20 @@ export default function useSpeechRecognition({ languageCode, onFinish }) {
         setInterim('')
         const text = finalTextRef.current.trim()
         finalTextRef.current = ''
-        if (text) onFinishRef.current?.(text)
+        if (text) {
+          playSpeechCaptured()
+          onFinishRef.current?.(text)
+        }
       }
 
       recognitionRef.current = recognition
       recognition.start()
       setListening(true)
+      playListenStart()
     } catch {
       recognitionRef.current = null
       setListening(false)
+      playError()
       setError('Could not start the microphone. Try again.')
     }
   }, [RecognitionClass, languageCode])

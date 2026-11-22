@@ -1,10 +1,13 @@
 import { DEFAULT_FORM_TYPES } from '../utils/languages.js'
 
-// Large, accessible form-type selection cards shown above chat before first turn.
+// Large, accessible form-type selection cards and One-Click Easy Voice Guide trigger.
 export default function WelcomeHero({
   selectedFormType = 'general',
   onSelectFormType,
   formTypes = DEFAULT_FORM_TYPES,
+  onStartEasyVoiceGuide,
+  handsFreeMode = false,
+  onToggleHandsFree,
 }) {
   const typesToRender = formTypes && formTypes.length > 0 ? formTypes : DEFAULT_FORM_TYPES
 
@@ -30,6 +33,33 @@ export default function WelcomeHero({
       <p className="welcome-subtitle">
         Your voice. Your language. Your form. Made easy.
       </p>
+
+      {/* Prominent Easy Voice Guide Button for Elderly & Visually Impaired */}
+      <div className="hero-voice-guide-wrapper">
+        <button
+          type="button"
+          className="hero-voice-guide-btn"
+          onClick={onStartEasyVoiceGuide}
+          title="Enable Guided Voice Mode, Read Aloud, and Hands-Free Voice-to-Voice Loop"
+        >
+          <span className="hero-voice-icon" aria-hidden="true">🎙️</span>
+          <span className="hero-voice-text-group">
+            <strong className="hero-voice-title">Start Easy Voice Guide</strong>
+            <span className="hero-voice-sub">One question at a time · Spoken aloud · Hands-free voice answer</span>
+          </span>
+        </button>
+
+        <div className="hero-handsfree-toggle-row">
+          <label className="hero-handsfree-label">
+            <input
+              type="checkbox"
+              checked={handsFreeMode}
+              onChange={(e) => onToggleHandsFree?.(e.target.checked)}
+            />
+            <span>Hands-Free Auto-Listening Mode (microphone opens automatically after each question)</span>
+          </label>
+        </div>
+      </div>
 
       <div className="form-type-selector-container">
         <h2 className="form-type-header">

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { generatePdf, validateForm, submitToPortal } from '../services/api.js'
-import { FORM_FIELDS, DOMAIN_EXTRA_FIELDS } from '../utils/languages.js'
+import { FORM_FIELDS, DOMAIN_EXTRA_FIELDS, FIELD_LABELS_BY_LANG } from '../utils/languages.js'
+import useSpeechSynthesis from '../hooks/useSpeechSynthesis.js'
 
-// Final review: edit core & domain values, validate, preview the PDF, confirm, download, and dispatch portal submission.
+// Final review: edit core & domain values, validate, read answers aloud, preview PDF, confirm, download, and dispatch portal submission.
 export default function ReviewScreen({
   formData = {},
   englishFormData = {},
@@ -14,6 +15,7 @@ export default function ReviewScreen({
   englishExtraFields = {},
   formId = null,
   onFinishAndErase,
+  slowVoice = false,
 }) {
   const [useEnglish, setUseEnglish] = useState(language === 'en')
   const [draft, setDraft] = useState(() =>
@@ -32,15 +34,18 @@ export default function ReviewScreen({
   const [submitting, setSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState(null)
   const [showPayload, setShowPayload] = useState(false)
+  const [readingSummary, setReadingSummary] = useState(false)
 
+  const speech = useSpeechSynthesis()
   const previewUrlRef = useRef('')
 
   // Free preview object URL on unmount or URL replacement
   useEffect(() => {
     return () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      speech.stop()
     }
-  }, [])
+  }, [speech])
 
   function showMessage(text, isError = false) {
     setMessage(text)
@@ -69,6 +74,75 @@ export default function ReviewScreen({
 
   const activeLanguage = useEnglish ? 'en' : language
   const domainFields = DOMAIN_EXTRA_FIELDS[formType] || []
+
+  // Read all filled answers aloud sequentially for visually impaired & illiterate users
+  function handleReadAloudSummary() {
+    if (readingSummary || speech.speaking) {
+      speech.stop()
+      setReadingSummary(false)
+      showMessage('Stopped reading answers.')
+      return
+    }
+
+    const lines = []
+    const langLabels = FIELD_LABELS_BY_LANG[activeLanguage] || FIELD_LABELS_BY_LANG.en
+
+    // Introduction line
+    const introMap = {
+      en: 'Reading your recorded application details.',
+      kn: 'ನಿಮ್ಮ ದಾಖಲಾದ ಫಾರ್ಮ್ ವಿವರಗಳನ್ನು ಓದಲಾಗುತ್ತಿದೆ.',
+      hi: 'आपके भरे हुए फॉर्म का विवरण पढ़ा जा रहा है।',
+      mr: 'तुमच्या नोंदवलेल्या अर्जाचा तपशील वाचत आहे.',
+      te: 'మీ దరఖాస్తు వివరాలను చదువుతున్నాము.',
+      ta: 'உங்கள் பதிவு செய்யப்பட்ட விவரங்கள் வாசிக்கப்படுகின்றன.',
+      ml: 'നിങ്ങളുടെ വിവരങ്ങൾ വായിക്കുന്നു.',
+      bn: 'আপনার ফর্মের বিবরণ পড়া হচ্ছে।',
+      gu: 'તમારી વિગતો વાંચવામાં આવી રહી છે.',
+      pa: 'ਤੁਹਾਡੇ ਵੇਰਵੇ ਪੜ੍ਹੇ ਜਾ ਰਹੇ ਹਨ।',
+    }
+    lines.push(introMap[activeLanguage] || introMap.en)
+
+    // Core fields
+    FORM_FIELDS.forEach((f) => {
+      const val = draft[f.key]
+      if (val) {
+        const label = langLabels[f.key] || f.label
+        lines.push(`${label}: ${val}`)
+      }
+    })
+
+    // Domain extra fields
+    domainFields.forEach((df) => {
+      const val = extraDraft[df.key]
+      if (val) {
+        lines.push(`${df.label}: ${val}`)
+      }
+    })
+
+    if (lines.length <= 1) {
+      showMessage('No answered details to read aloud yet.', true)
+      return
+    }
+
+    const endMap = {
+      en: 'Review complete. All details are recorded.',
+      kn: 'ಪರಿಶೀಲನೆ ಪೂರ್ಣಗೊಂಡಿದೆ. ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ದಾಖಲಿಸಲಾಗಿದೆ.',
+      hi: 'समीक्षा पूरी हुई। सभी विवरण दर्ज हैं।',
+      mr: 'तपासणी पूर्ण झाली. सर्व माहिती नोंदवली गेली आहे.',
+    }
+    lines.push(endMap[activeLanguage] || endMap.en)
+
+    setReadingSummary(true)
+    showMessage('Reading all answers aloud… Press stop to pause.')
+
+    speech.speakSequence(lines, activeLanguage, {
+      rate: slowVoice ? 0.75 : 1.0,
+      onComplete: () => {
+        setReadingSummary(false)
+        showMessage('Finished reading all answers.')
+      },
+    })
+  }
 
   async function checkDetails() {
     setBusy('check')
@@ -178,7 +252,7 @@ export default function ReviewScreen({
         <p className="review-subtitle">
           {useEnglish
             ? 'Official Form Collector View: review and export the application in standardized English.'
-            : 'Check every value in your native language. Edit anything that is wrong, then create the PDF or dispatch to portal.'}
+            : 'Check every value in your native language. Edit anything that is wrong, listen to it read aloud, then create the PDF or dispatch to portal.'}
         </p>
 
         {language !== 'en' && (
@@ -258,6 +332,18 @@ export default function ReviewScreen({
 
         <div className="review-preview">
           <div className="review-actions">
+            {/* Read All My Answers Aloud Button */}
+            <button
+              type="button"
+              className={`small-button ${readingSummary ? 'reading-summary-active' : ''}`}
+              onClick={handleReadAloudSummary}
+              disabled={submitting || busy !== ''}
+              title="Read all completed form answers aloud sequentially"
+            >
+              <span aria-hidden="true">{readingSummary ? '⏹️' : '🔊'}</span>
+              <span>{readingSummary ? 'Stop Reading' : 'Read All My Answers Aloud'}</span>
+            </button>
+
             <button
               type="button"
               className="small-button"

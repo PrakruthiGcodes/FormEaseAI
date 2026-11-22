@@ -1905,3 +1905,519 @@
 .danger-button:hover {
   background: #dc2626;
 }
+
+.header-session-pin-badge {
+  font-size: 0.78rem;
+  font-family: monospace;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.header-session-pin-badge strong {
+  letter-spacing: 0.1em;
+  font-size: 0.85rem;
+}
+
+
+/* ==========================================================================
+   Rural, Elderly & Visually Impaired Accessibility & Guided Mode Styles
+   ========================================================================== */
+
+/* Header controls >= 48px touch targets & active badges */
+.header-btn {
+  min-height: 44px;
+}
+
+.header-btn-active {
+  background: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #6366f1 !important;
+}
+
+.high-contrast-active {
+  background: #fef08a !important;
+  color: #854d0e !important;
+  border-color: #eab308 !important;
+}
+
+.hands-free-active {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border-color: #22c55e !important;
+}
+
+/* High-Contrast Theme (.high-contrast) */
+.app-shell.high-contrast {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.app-shell.high-contrast .app-header,
+.app-shell.high-contrast .app-main,
+.app-shell.high-contrast .welcome,
+.app-shell.high-contrast .guided-voice-container,
+.app-shell.high-contrast .guided-question-card,
+.app-shell.high-contrast .form-summary,
+.app-shell.high-contrast .review-screen,
+.app-shell.high-contrast .saved-panel,
+.app-shell.high-contrast .modal-dialog,
+.app-shell.high-contrast .form-type-card,
+.app-shell.high-contrast .chat-window,
+.app-shell.high-contrast .chat-input-wrapper {
+  background: #000000 !important;
+  border-color: #facc15 !important;
+  color: #ffffff !important;
+}
+
+.app-shell.high-contrast h1,
+.app-shell.high-contrast h2,
+.app-shell.high-contrast h3,
+.app-shell.high-contrast h4,
+.app-shell.high-contrast strong,
+.app-shell.high-contrast .field-label,
+.app-shell.high-contrast .guided-question-text {
+  color: #facc15 !important;
+}
+
+.app-shell.high-contrast p,
+.app-shell.high-contrast span,
+.app-shell.high-contrast .field-value {
+  color: #ffffff !important;
+}
+
+.app-shell.high-contrast button:not(.danger-button) {
+  background: #111111 !important;
+  border: 2px solid #facc15 !important;
+  color: #facc15 !important;
+}
+
+.app-shell.high-contrast button:hover {
+  background: #facc15 !important;
+  color: #000000 !important;
+}
+
+.app-shell.high-contrast input,
+.app-shell.high-contrast select,
+.app-shell.high-contrast textarea {
+  background: #111111 !important;
+  border: 2px solid #facc15 !important;
+  color: #ffffff !important;
+}
+
+/* Hero Voice Guide Banner */
+.hero-voice-guide-wrapper {
+  margin: 16px auto 24px;
+  width: 100%;
+  max-width: 640px;
+  text-align: center;
+}
+
+.hero-voice-guide-btn {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #4338ca, #6d28d9);
+  color: #ffffff;
+  border-radius: 16px;
+  border: 2px solid #a5b4fc;
+  cursor: pointer;
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hero-voice-guide-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -5px rgba(79, 70, 229, 0.5);
+}
+
+.hero-voice-icon {
+  font-size: 2.2rem;
+}
+
+.hero-voice-text-group {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.hero-voice-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.hero-voice-sub {
+  font-size: 0.85rem;
+  opacity: 0.95;
+  margin-top: 2px;
+}
+
+.hero-handsfree-toggle-row {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-handsfree-label {
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+/* Guided Voice View */
+.guided-voice-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+.guided-progress-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guided-step-badge {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #4f46e5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.guided-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.guided-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  transition: width 0.3s ease;
+}
+
+.guided-question-card {
+  background: var(--surface, #ffffff);
+  border: 2px solid #e0e7ff;
+  border-radius: 20px;
+  padding: 32px 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.guided-field-tag {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.guided-question-text {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #111827;
+  margin: 0 0 16px;
+}
+
+.guided-error-banner {
+  background: #fee2e2;
+  border: 1px solid #f87171;
+  color: #991b1b;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.guided-helper-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.guided-helper-btn {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+
+.guided-helper-btn:hover {
+  background: #e5e7eb;
+}
+
+.guided-example-box {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 0 0 20px;
+  text-align: left;
+}
+
+.example-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #166534;
+  display: block;
+}
+
+.example-text {
+  font-size: 1.05rem;
+  color: #14532d;
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+/* Giant Accessible Mic Button (>=140px) */
+.guided-mic-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.guided-giant-mic {
+  width: 140px;
+  height: 140px;
+  min-width: 140px;
+  min-height: 140px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 30px rgba(79, 70, 229, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.guided-giant-mic:hover {
+  transform: scale(1.05);
+}
+
+.guided-giant-mic.listening {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 0 0 16px rgba(239, 68, 68, 0.25);
+  animation: pulse-ring 1.5s infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 22px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.guided-mic-icon {
+  font-size: 3.5rem;
+}
+
+.guided-mic-status {
+  margin-top: 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.guided-status-text.active {
+  color: #dc2626;
+}
+
+.guided-status-text.idle {
+  color: #6b7280;
+}
+
+.guided-status-text.saving {
+  color: #4f46e5;
+}
+
+.guided-transcript-box {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-top: 14px;
+  width: 100%;
+  max-width: 480px;
+  text-align: left;
+}
+
+.transcript-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.transcript-live {
+  font-size: 1rem;
+  color: #1e293b;
+  font-style: italic;
+  margin: 4px 0 0;
+}
+
+.guided-fallback-toggle-row {
+  margin-top: 20px;
+}
+
+.guided-toggle-type-btn {
+  background: none;
+  border: none;
+  color: #6366f1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  min-height: 44px;
+}
+
+.guided-fallback-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.guided-fallback-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.guided-complete-card {
+  text-align: center;
+  padding: 40px 24px;
+  background: white;
+  border-radius: 20px;
+  border: 2px solid #86efac;
+}
+
+.guided-complete-icon {
+  font-size: 3.5rem;
+}
+
+.guided-complete-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #166534;
+}
+
+.guided-complete-desc {
+  font-size: 1rem;
+  color: #4b5563;
+  max-width: 500px;
+  margin: 10px auto 24px;
+}
+
+.guided-review-btn {
+  font-size: 1.1rem;
+  padding: 14px 28px;
+  border-radius: 10px;
+}
+
+/* Frictionless Lock Curtain */
+.lock-frictionless-resume {
+  margin: 18px 0;
+}
+
+.lock-resume-btn {
+  width: 100%;
+  font-size: 1.15rem;
+  font-weight: 800;
+  padding: 16px 20px;
+  background: #16a34a;
+  color: #ffffff;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  min-height: 52px;
+  box-shadow: 0 8px 16px rgba(22, 163, 74, 0.3);
+  transition: background 0.15s ease;
+}
+
+.lock-resume-btn:hover {
+  background: #15803d;
+}
+
+.lock-footer-actions {
+  margin-top: 16px;
+}
+
+/* Reading summary active highlight in ReviewScreen */
+.reading-summary-active {
+  background: #fef08a !important;
+  color: #854d0e !important;
+  font-weight: 700 !important;
+  border-color: #eab308 !important;
+}
+
+/* Saved forms panel collapsible */
+.unlock-collapsible-wrapper {
+  margin: 16px 0;
+}
+
+.unlock-collapsible-toggle {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 8px 0;
+  min-height: 44px;
+}
